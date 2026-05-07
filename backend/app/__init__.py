@@ -23,7 +23,7 @@ def create_app(config_name: str = None) -> Flask:
     # --- Inicializar Extensões ---
     # init_app() associa cada extensão à app sem criar dependência circular.
     # Flask-SQLAlchemy-Lite recebe a Base declarativa no init_app.
-    db.init_app(app, model_class=Base)
+    db.init_app(app)
     jwt.init_app(app)
     limiter.init_app(app)
 
