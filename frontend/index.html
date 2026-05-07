@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Inventário</title>
+</head>
+<body>
+    <h1>Project Setup — Frontend placeholder</h1>
+    <p>O frontend real será desenvolvido nos sprints seguintes.</p>
+    <script>
+        // Teste rápido: chama o health check da API
+        fetch('/api/health')
+            .then(r => r.json())
+            .then(data => {
+                const p = document.createElement('p');
+                p.textContent = 'API status: ' + JSON.stringify(data);
+                p.style.color = 'green';
+                document.body.appendChild(p);
+            })
+            .catch(err => {
+                const p = document.createElement('p');
+                p.textContent = 'Erro ao contactar API: ' + err;
+                p.style.color = 'red';
+                document.body.appendChild(p);
+            });
+    </script>
+</body>
+</html>
