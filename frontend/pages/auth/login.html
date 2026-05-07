@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Inventory System</title>
+    <link rel="stylesheet" href="../../css/bootstrap.min.css">
+</head>
+
+<body class="bg-light">
+
+    <div class="container">
+        <div class="row vh-100 align-items-center justify-content-center">
+            <div class="col-12 col-sm-8 col-md-6 col-lg-4">
+                <div class="card shadow border-0 p-4">
+                    <div class="card-body">
+                        <div class="text-center mb-4">
+                            <h1 class="h3 fw-bold text-dark">Bem-vindo</h1>
+                            <p class="text-muted">Introduza os seus dados para aceder</p>
+                        </div>
+
+                        <form action="#" method="POST" id="loginForm">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Utilizador</label>
+                                <input type="text" id="username" class="form-control form-control-lg"
+                                    placeholder="nome de utilizador" required>
+                                <div class="invalid-feedback">O campo utilizador não pode estar vazio.</div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label fw-semibold">Palavra-passe</label>
+                                <input type="password" id="password" class="form-control form-control-lg"
+                                    placeholder="palavra-passe" required>
+                                <div class="invalid-feedback">A palavra-passe deve ter pelo menos 8 caracteres.</div>
+                            </div>
+
+                            <button type="submit" id="btnEnter" class="btn btn-primary w-100 fw-bold py-2 shadow-sm"
+                                disabled>
+                                Entrar
+                            </button>
+                        </form>
+
+                        <div class="mt-4 text-center border-top pt-3">
+                            <p class="small text-muted mb-0">
+                                Ainda não tem conta?
+                                <a href="register.html" class="text-primary fw-bold text-decoration-none">Registe-se</a>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const inputUsername = document.querySelector('#username');
+        const inputPassword = document.querySelector('#password');
+        const btnEntrar = document.querySelector('#btnEnter');
+
+        function ValidForm() {
+            const ValidUsername = inputUsername.value.trim().length > 0;
+            const ValidPassword = inputPassword.value.length >= 8;
+
+            btnEntrar.disabled = !(userValido && passValida);
+        }
+
+        inputUsername.addEventListener('input', () => {
+            if (inputUsername.value.trim().length > 0) {
+                inputUsername.classList.remove('is-invalid');
+            } else {
+                inputUsername.classList.add('is-invalid');
+            }
+            ValidForm();
+        });
+
+        inputPassword.addEventListener('input', () => {
+            if (inputPassword.value.length >= 8) {
+                inputPassword.classList.remove('is-invalid');
+            } else {
+                inputPassword.classList.add('is-invalid');
+            }
+            ValidForm();
+        });
+    </script>
+</body>
+
+</html>
