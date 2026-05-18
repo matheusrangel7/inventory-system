@@ -9,9 +9,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
-<body class="bg-gray-100">
-    <div class="flex min-h-screen">
-        <div class="w-64 bg-blue-900 min-h-screen p-4 flex flex-col">
+<body class="bg-gray-100 h-screen overflow-hidden">
+    <div class="flex h-full">
+
+        <div class="w-64 bg-blue-900 h-full p-4 flex flex-col flex-shrink-0">
             <div class="flex items-center gap-3 mb-8 p-2">
                 <div class="flex gap-1">
                     <img src="../../../assets/ubi-logo-white.png" class="w-20 h-20">
@@ -53,26 +54,28 @@
                 </button>
             </nav>
 
-            <div class="mt-auto">
-                <button onclick="window.location.href='index.html'"
+            <div class="mt-auto"> 
+                <button onclick="window.location.href='../../auth/login.html'"
                     class="w-full bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors font-bold">
                     SAIR
                 </button>
             </div>
         </div>
 
-        <div class="flex-1">
-            <header class="bg-white shadow-sm p-4 flex justify-between items-center">
+        <div class="flex-1 flex flex-col h-full min-w-0">
+
+            <header class="bg-white shadow-sm p-4 flex justify-between items-center flex-shrink-0">
                 <h1 class="text-xl font-bold" id="pageTitle">DASHBOARD</h1>
                 <div class="flex items-center gap-4">
                     <span class="text-sm">admin@ubi.pt</span>
                     <div
                         class="w-10 h-10 bg-gray-600 text-white rounded-full flex items-center justify-center font-bold">
-                        AD</div>
+                        AD
+                    </div>
                 </div>
             </header>
 
-            <main class="p-6">
+            <main class="p-6 flex-1 overflow-y-auto">
                 <div id="view-dashboard">
                     <div class="grid grid-cols-3 gap-6 mb-6">
                         <div class="bg-white p-6 rounded-lg shadow">
@@ -91,12 +94,12 @@
 
                     <div class="grid grid-cols-2 gap-6 mb-6">
                         <div class="bg-white p-6 rounded-lg shadow">
-                            <h3 class="text-lg font-bold mb-4">Registos Mensais</h3>
-                            <canvas id="chartRegistos" height="200"></canvas>
+                            <h3 class="text-lg font-bold mb-4">Registos Mensais</h3><canvas id="chartRegistos"
+                                height="200"></canvas>
                         </div>
                         <div class="bg-white p-6 rounded-lg shadow">
-                            <h3 class="text-lg font-bold mb-4">Atividade por Tipo</h3>
-                            <canvas id="chartAtividade" height="200"></canvas>
+                            <h3 class="text-lg font-bold mb-4">Atividade por Tipo</h3><canvas id="chartAtividade"
+                                height="200"></canvas>
                         </div>
                     </div>
 
@@ -146,137 +149,11 @@
                 </div>
 
                 <div id="view-utilizadores" class="hidden">
-                    <div class="flex justify-between items-center mb-6">
-                        <h2 class="text-2xl font-bold">UTILIZADORES</h2>
-                        <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold">+ NOVO
-                            UTILIZADOR</button>
-                    </div>
-                    <div class="bg-white p-6 rounded-lg shadow">
-                        <table class="w-full">
-                            <thead class="bg-gray-100">
-                                <tr>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ID</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">NOME</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">EMAIL</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">TIPO</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ESTADO</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">AÇÕES</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr class="border-b hover:bg-gray-50">
-                                    <td class="px-4 py-3">1</td>
-                                    <td class="px-4 py-3">João Silva</td>
-                                    <td class="px-4 py-3">joao@ubi.pt</td>
-                                    <td class="px-4 py-3">Gestor</td>
-                                    <td class="px-4 py-3"><span
-                                            class="px-2 py-1 rounded text-xs bg-green-100 text-green-800">Ativo</span>
-                                    </td>
-                                    <td class="px-4 py-3">
-                                        <button
-                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 mr-2 font-bold">EDITAR</button>
-                                        <button
-                                            class="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700 font-bold">REMOVER</button>
-                                    </td>
-                                </tr>
-                                <tr class="border-b hover:bg-gray-50">
-                                    <td class="px-4 py-3">2</td>
-                                    <td class="px-4 py-3">Maria Santos</td>
-                                    <td class="px-4 py-3">maria@ubi.pt</td>
-                                    <td class="px-4 py-3">Admin</td>
-                                    <td class="px-4 py-3"><span
-                                            class="px-2 py-1 rounded text-xs bg-green-100 text-green-800">Ativo</span>
-                                    </td>
-                                    <td class="px-4 py-3">
-                                        <button
-                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 mr-2 font-bold">EDITAR</button>
-                                        <button
-                                            class="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700 font-bold">REMOVER</button>
-                                    </td>
-                                </tr>
-                                <tr class="border-b hover:bg-gray-50">
-                                    <td class="px-4 py-3">3</td>
-                                    <td class="px-4 py-3">Pedro Costa</td>
-                                    <td class="px-4 py-3">pedro@ubi.pt</td>
-                                    <td class="px-4 py-3">Gestor</td>
-                                    <td class="px-4 py-3"><span
-                                            class="px-2 py-1 rounded text-xs bg-gray-100 text-gray-800">Inativo</span>
-                                    </td>
-                                    <td class="px-4 py-3">
-                                        <button
-                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 mr-2 font-bold">EDITAR</button>
-                                        <button
-                                            class="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700 font-bold">REMOVER</button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
                 </div>
-
                 <div id="view-locais" class="hidden">
-                    <div class="flex justify-between items-center mb-6">
-                        <h2 class="text-2xl font-bold">LOCAIS</h2>
-                        <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold">+ NOVO
-                            LOCAL</button>
-                    </div>
-                    <div class="bg-white p-6 rounded-lg shadow">
-                        <table class="w-full">
-                            <thead class="bg-gray-100">
-                                <tr>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ID</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">NOME</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">Nº SALAS</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">Nº ATIVOS</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">GESTOR</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">AÇÕES</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr class="border-b hover:bg-gray-50">
-                                    <td class="px-4 py-3">1</td>
-                                    <td class="px-4 py-3">Edifício 6</td>
-                                    <td class="px-4 py-3">15</td>
-                                    <td class="px-4 py-3">250</td>
-                                    <td class="px-4 py-3">João Silva</td>
-                                    <td class="px-4 py-3">
-                                        <button
-                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 mr-2 font-bold">DETALHES</button>
-                                        <button
-                                            class="bg-gray-600 text-white px-3 py-1 rounded text-xs hover:bg-gray-700 font-bold">EDITAR</button>
-                                    </td>
-                                </tr>
-                                <tr class="border-b hover:bg-gray-50">
-                                    <td class="px-4 py-3">2</td>
-                                    <td class="px-4 py-3">Edifício 7</td>
-                                    <td class="px-4 py-3">12</td>
-                                    <td class="px-4 py-3">180</td>
-                                    <td class="px-4 py-3">Maria Santos</td>
-                                    <td class="px-4 py-3">
-                                        <button
-                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 mr-2 font-bold">DETALHES</button>
-                                        <button
-                                            class="bg-gray-600 text-white px-3 py-1 rounded text-xs hover:bg-gray-700 font-bold">EDITAR</button>
-                                    </td>
-                                </tr>
-                                <tr class="border-b hover:bg-gray-50">
-                                    <td class="px-4 py-3">3</td>
-                                    <td class="px-4 py-3">Biblioteca</td>
-                                    <td class="px-4 py-3">8</td>
-                                    <td class="px-4 py-3">120</td>
-                                    <td class="px-4 py-3">Pedro Costa</td>
-                                    <td class="px-4 py-3">
-                                        <button
-                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 mr-2 font-bold">DETALHES</button>
-                                        <button
-                                            class="bg-gray-600 text-white px-3 py-1 rounded text-xs hover:bg-gray-700 font-bold">EDITAR</button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
                 </div>
             </main>
+
         </div>
     </div>
 </body>

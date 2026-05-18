@@ -225,3 +225,5 @@ tailwind.config.js
 tailwindcss
 
 .vscode/
+
+input.css

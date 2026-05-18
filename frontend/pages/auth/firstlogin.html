@@ -5,14 +5,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>InvUBI - Primeira Autenticação</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="../../css/tailwind.css">
 </head>
 
 <body class="bg-gradient-to-br from-slate-100 to-slate-200 min-h-screen flex items-center justify-center p-6 relative">
 
     <header class="fixed top-6 left-6 flex items-center gap-3 select-none z-50">
         <div class="flex gap-1">
-            <img src="../../assets/ubi-logo-dark.png" class="w-12 h-12 object-contain">
+            <img src="../../assets/ubi-logo-dark.png" class="w-12 h-12 object-contain" alt="Logo UBI">
         </div>
         <span class="text-4xl font-extrabold tracking-wider" style="color: #002566;">InvUBI</span>
     </header>
@@ -23,10 +23,14 @@
         <div class="flex flex-col items-center mb-8">
             <div
                 class="w-16 h-16 bg-blue-50 border border-blue-100 rounded-full flex items-center justify-center mb-3 shadow-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" style="color: #002566;" fill="none"
-                    viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor" class="size-6">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                </svg>
+
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
             </div>
             <h2 class="text-2xl font-black tracking-tight text-center" style="color: #002566;">Concluir Registo</h2>
