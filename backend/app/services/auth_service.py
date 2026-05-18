@@ -57,9 +57,9 @@ def complete_registration(token: str, new_password: str) -> tuple[bool, str]:
     log_action(
         action="UPDATE",
         table_name="users",
-        record_id="user.user_id",
+        record_id=user.user_id,
         old_value={"registration_status": old_status},
-        new_value={"regisration_status": "Concluído"},
+        new_value={"registration_status": "Concluído"},
     )
 
     db.session.commit()
