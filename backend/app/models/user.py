@@ -12,12 +12,12 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(
-        Enum("Gestor", "Administrador", name="user_role"),
+        Enum("Gestor", "Administrador", name="user_role_enum"),
         nullable=False,
         default="Gestor",
     )
     registration_status: Mapped[str] = mapped_column(
-        Enum("Pendente", "Concluído", name="registration_status"),
+        Enum("Pendente", "Concluído", name="registration_status_enum"),
         nullable=False,
         default="Pendente",
     )

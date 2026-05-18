@@ -13,7 +13,7 @@ class Location(Base):
         nullable=False,
         unique=True,
     )
-    location_manager: Mapped[Optional[int]] = mapped_column(
+    location_manager_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("users.user_id", ondelete="SET NULL"),
         nullable=True,

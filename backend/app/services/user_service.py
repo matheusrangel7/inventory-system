@@ -80,7 +80,7 @@ def create_gestor(
     db.session.flush()
 
     for loc in locations:
-        loc.location_manager = new_user.user_id
+        loc.location_manager_id = new_user.user_id
 
     log_action(
         action="INSERT",
