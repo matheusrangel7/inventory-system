@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InvUBI - Admin Dashboard</title>
+    <link rel="stylesheet" href="../../../css/tailwind.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body class="bg-gray-100">
+    <div class="flex min-h-screen">
+        <div class="w-64 bg-blue-900 min-h-screen p-4 flex flex-col">
+            <div class="flex items-center gap-3 mb-8 p-2">
+                <div class="flex gap-1">
+                    <img src="../../../assets/ubi-logo-white.png" class="w-20 h-20">
+                </div>
+                <h1 class="text-4xl text-white font-semibold">InvUBI</h1>
+            </div>
+
+            <nav class="flex-1">
+                <button onclick="showView('dashboard')" id="btn-dashboard"
+                    class="w-full flex items-center gap-3 px-4 py-3 mb-2 rounded bg-white text-blue-900">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg>
+                    <span>Dashboard</span>
+                </button>
+
+                <button onclick="showView('utilizadores')" id="btn-utilizadores"
+                    class="w-full flex items-center gap-3 px-4 py-3 mb-2 rounded text-white hover:bg-blue-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                    <span>Utilizadores</span>
+                </button>
+
+                <button onclick="showView('locais')" id="btn-locais"
+                    class="w-full flex items-center gap-3 px-4 py-3 mb-2 rounded text-white hover:bg-blue-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span>Locais</span>
+                </button>
+            </nav>
+
+            <div class="mt-auto">
+                <button onclick="window.location.href='index.html'"
+                    class="w-full bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors font-bold">
+                    SAIR
+                </button>
+            </div>
+        </div>
+
+        <div class="flex-1">
+            <header class="bg-white shadow-sm p-4 flex justify-between items-center">
+                <h1 class="text-xl font-bold" id="pageTitle">DASHBOARD</h1>
+                <div class="flex items-center gap-4">
+                    <span class="text-sm">admin@ubi.pt</span>
+                    <div
+                        class="w-10 h-10 bg-gray-600 text-white rounded-full flex items-center justify-center font-bold">
+                        AD</div>
+                </div>
+            </header>
+
+            <main class="p-6">
+                <div id="view-dashboard">
+                    <div class="grid grid-cols-3 gap-6 mb-6">
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-sm text-gray-600 mb-2">Total Utilizadores</h3>
+                            <p class="text-4xl font-bold">145</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-sm text-gray-600 mb-2">Total Locais</h3>
+                            <p class="text-4xl font-bold">145</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-sm text-gray-600 mb-2">Total Ativos</h3>
+                            <p class="text-4xl font-bold text-red-600">145</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-6 mb-6">
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-lg font-bold mb-4">Registos Mensais</h3>
+                            <canvas id="chartRegistos" height="200"></canvas>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-lg font-bold mb-4">Atividade por Tipo</h3>
+                            <canvas id="chartAtividade" height="200"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-lg font-bold mb-4">Utilizadores Recentes</h3>
+                        <table class="w-full">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">ID</th>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">NOME</th>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">EMAIL</th>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">TIPO</th>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">ESTADO</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="border-b">
+                                    <td class="px-4 py-3">1</td>
+                                    <td class="px-4 py-3">João Silva</td>
+                                    <td class="px-4 py-3">joao@ubi.pt</td>
+                                    <td class="px-4 py-3">Gestor</td>
+                                    <td class="px-4 py-3"><span
+                                            class="px-2 py-1 rounded text-xs bg-green-100 text-green-800">Ativo</span>
+                                    </td>
+                                </tr>
+                                <tr class="border-b">
+                                    <td class="px-4 py-3">2</td>
+                                    <td class="px-4 py-3">Maria Santos</td>
+                                    <td class="px-4 py-3">maria@ubi.pt</td>
+                                    <td class="px-4 py-3">Admin</td>
+                                    <td class="px-4 py-3"><span
+                                            class="px-2 py-1 rounded text-xs bg-green-100 text-green-800">Ativo</span>
+                                    </td>
+                                </tr>
+                                <tr class="border-b">
+                                    <td class="px-4 py-3">3</td>
+                                    <td class="px-4 py-3">Pedro Costa</td>
+                                    <td class="px-4 py-3">pedro@ubi.pt</td>
+                                    <td class="px-4 py-3">Gestor</td>
+                                    <td class="px-4 py-3"><span
+                                            class="px-2 py-1 rounded text-xs bg-gray-100 text-gray-800">Inativo</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="view-utilizadores" class="hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold">UTILIZADORES</h2>
+                        <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold">+ NOVO
+                            UTILIZADOR</button>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <table class="w-full">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">ID</th>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">NOME</th>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">EMAIL</th>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">TIPO</th>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">ESTADO</th>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">AÇÕES</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="border-b hover:bg-gray-50">
+                                    <td class="px-4 py-3">1</td>
+                                    <td class="px-4 py-3">João Silva</td>
+                                    <td class="px-4 py-3">joao@ubi.pt</td>
+                                    <td class="px-4 py-3">Gestor</td>
+                                    <td class="px-4 py-3"><span
+                                            class="px-2 py-1 rounded text-xs bg-green-100 text-green-800">Ativo</span>
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        <button
+                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 mr-2 font-bold">EDITAR</button>
+                                        <button
+                                            class="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700 font-bold">REMOVER</button>
+                                    </td>
+                                </tr>
+                                <tr class="border-b hover:bg-gray-50">
+                                    <td class="px-4 py-3">2</td>
+                                    <td class="px-4 py-3">Maria Santos</td>
+                                    <td class="px-4 py-3">maria@ubi.pt</td>
+                                    <td class="px-4 py-3">Admin</td>
+                                    <td class="px-4 py-3"><span
+                                            class="px-2 py-1 rounded text-xs bg-green-100 text-green-800">Ativo</span>
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        <button
+                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 mr-2 font-bold">EDITAR</button>
+                                        <button
+                                            class="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700 font-bold">REMOVER</button>
+                                    </td>
+                                </tr>
+                                <tr class="border-b hover:bg-gray-50">
+                                    <td class="px-4 py-3">3</td>
+                                    <td class="px-4 py-3">Pedro Costa</td>
+                                    <td class="px-4 py-3">pedro@ubi.pt</td>
+                                    <td class="px-4 py-3">Gestor</td>
+                                    <td class="px-4 py-3"><span
+                                            class="px-2 py-1 rounded text-xs bg-gray-100 text-gray-800">Inativo</span>
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        <button
+                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 mr-2 font-bold">EDITAR</button>
+                                        <button
+                                            class="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700 font-bold">REMOVER</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="view-locais" class="hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold">LOCAIS</h2>
+                        <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold">+ NOVO
+                            LOCAL</button>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <table class="w-full">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">ID</th>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">NOME</th>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">Nº SALAS</th>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">Nº ATIVOS</th>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">GESTOR</th>
+                                    <th class="px-4 py-2 text-left text-sm font-bold">AÇÕES</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="border-b hover:bg-gray-50">
+                                    <td class="px-4 py-3">1</td>
+                                    <td class="px-4 py-3">Edifício 6</td>
+                                    <td class="px-4 py-3">15</td>
+                                    <td class="px-4 py-3">250</td>
+                                    <td class="px-4 py-3">João Silva</td>
+                                    <td class="px-4 py-3">
+                                        <button
+                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 mr-2 font-bold">DETALHES</button>
+                                        <button
+                                            class="bg-gray-600 text-white px-3 py-1 rounded text-xs hover:bg-gray-700 font-bold">EDITAR</button>
+                                    </td>
+                                </tr>
+                                <tr class="border-b hover:bg-gray-50">
+                                    <td class="px-4 py-3">2</td>
+                                    <td class="px-4 py-3">Edifício 7</td>
+                                    <td class="px-4 py-3">12</td>
+                                    <td class="px-4 py-3">180</td>
+                                    <td class="px-4 py-3">Maria Santos</td>
+                                    <td class="px-4 py-3">
+                                        <button
+                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 mr-2 font-bold">DETALHES</button>
+                                        <button
+                                            class="bg-gray-600 text-white px-3 py-1 rounded text-xs hover:bg-gray-700 font-bold">EDITAR</button>
+                                    </td>
+                                </tr>
+                                <tr class="border-b hover:bg-gray-50">
+                                    <td class="px-4 py-3">3</td>
+                                    <td class="px-4 py-3">Biblioteca</td>
+                                    <td class="px-4 py-3">8</td>
+                                    <td class="px-4 py-3">120</td>
+                                    <td class="px-4 py-3">Pedro Costa</td>
+                                    <td class="px-4 py-3">
+                                        <button
+                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 mr-2 font-bold">DETALHES</button>
+                                        <button
+                                            class="bg-gray-600 text-white px-3 py-1 rounded text-xs hover:bg-gray-700 font-bold">EDITAR</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+</body>
+
+</html>
