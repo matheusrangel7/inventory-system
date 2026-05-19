@@ -1,7 +1,6 @@
 import secrets
-import bcrypt
 from sqlalchemy import select
-from app.extensions import db
+from app.extensions import db, ph
 from app.models.user import User
 from app.models.location import Location
 from app.utils.audit import log_action
@@ -60,10 +59,7 @@ def create_gestor(
         locations.append(loc)
 
     random_password = secrets.token_urlsafe(32)
-    password_hash = bcrypt.hashpw(
-        random_password.encode("utf-8"),
-        bcrypt.gensalt(rounds=12),
-    ).decode("utf-8")
+    password_hash = ph.hash(random_password)
 
     del random_password
 
