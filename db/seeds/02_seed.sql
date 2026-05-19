@@ -1,7 +1,7 @@
 INSERT INTO users (email, password_hash, role, registration_status)
 VALUES (
     'admin@universidade.pt',
-    '$2b$12$XuQQOre8PDF6ZAYO0QZK2.tjqCK4eoZxHczLQ3hHnh7Tx7ft87r2.',
+    '$argon2id$v=19$m=65536,t=3,p=4$KXaeMIw8/TDscAThtFksrA$bdUM25jkLPlIpGSVhe+VCJMm+uMG3GOEX90ZaST95ws',
     'Administrador',
     'Concluído'
 ) ON CONFLICT (email) DO NOTHING;
