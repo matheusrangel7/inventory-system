@@ -227,3 +227,5 @@ tailwindcss
 .vscode/
 
 input.css
+
+nginx/certs/
