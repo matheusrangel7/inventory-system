@@ -54,8 +54,8 @@
                 </button>
             </nav>
 
-            <div class="mt-auto"> 
-                <button onclick="window.location.href='../../auth/login.html'"
+            <div class="mt-auto">
+                <button type="button" id="logoutBtn"
                     class="w-full bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors font-bold">
                     SAIR
                 </button>
@@ -67,7 +67,7 @@
             <header class="bg-white shadow-sm p-4 flex justify-between items-center flex-shrink-0">
                 <h1 class="text-xl font-bold" id="pageTitle">DASHBOARD</h1>
                 <div class="flex items-center gap-4">
-                    <span class="text-sm">admin@ubi.pt</span>
+                    <span class="text-sm" id="userEmail"></span>
                     <div
                         class="w-10 h-10 bg-gray-600 text-white rounded-full flex items-center justify-center font-bold">
                         AD
@@ -156,6 +156,12 @@
 
         </div>
     </div>
+    <script src="../../../js/api.js"></script>
+    <script src="../../../js/auth.js"></script>
+    <script src="../../../js/dashboard.js"></script>
+    <script>
+        initDashboard({ expectedRole: "Administrador" });
+    </script>
 </body>
 
 </html>
