@@ -4,7 +4,7 @@ from app.extensions import mail
 
 def send_registration_email(to_email: str, token: str) -> bool:
     base_url = current_app.config.get("APP_BASE_URL", "http://localhost")
-    link = f"{base_url}/completar-registo?token={token}"
+    link = f"{base_url}/pages/auth/firstlogin.html?token={token}"
 
     msg = Message(
         subject="Conclusão do Registo — Sistema de Inventário",

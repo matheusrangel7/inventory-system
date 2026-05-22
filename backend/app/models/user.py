@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import String, Boolean, DateTime, Enum
 from sqlalchemy.orm import Mapped, mapped_column
@@ -9,7 +9,7 @@ class User(Base):
     __tablename__ = "users"
 
     user_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    email: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(
         Enum("Gestor", "Administrador", name="user_role_enum"),
@@ -25,9 +25,13 @@ class User(Base):
         String(64),
         nullable=True,
     )
+
+    totp_secret: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
 
     def __repr__(self) -> str:

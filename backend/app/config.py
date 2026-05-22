@@ -1,10 +1,11 @@
 import os
+from datetime import timedelta
+from app.constants import ACCESS_TOKEN_MINUTES, REFRESH_TOKEN_DAYS
 
 
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-insecure")
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "jwt-insecure")
-    JWT_ACCESS_TOKEN_EXPIRES = False
 
     DB_USER = os.environ.get("DB_USER", "app_user")
     DB_PASSWORD = os.environ.get("DB_PASSWORD", "password")
@@ -19,6 +20,14 @@ class Config:
         )
     }
 
+    JWT_TOKEN_LOCATION = ["cookies"]
+    JWT_COOKIE_SECURE = True
+    JWT_COOKIE_SAMESITE = "Strict"
+    JWT_COOKIE_CSRF_PROTECT = False
+
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=ACCESS_TOKEN_MINUTES)
+    REFRESH_TOKEN_EXPIRES_DAYS = REFRESH_TOKEN_DAYS
+
     MAIL_SERVER = os.environ.get("MAIL_SERVER", "mailhog")
     MAIL_PORT = int(os.environ.get("MAIL_PORT", 1025))
     MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "false").lower() == "true"
@@ -28,15 +37,18 @@ class Config:
         "MAIL_DEFAULT_SENDER", "sistema@universidade.pt"
     )
 
-    APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost")
+    APP_BASE_URL = os.environ.get("APP_BASE_URL", "https://localhost")
 
 
 class DevelopmentConfig(Config):
     DEBUG = True
+    JWT_COOKIE_SECURE = False
 
 
 class ProductionConfig(Config):
     DEBUG = False
+    JWT_COOKIE_CSRF_PROTECT = True
+
 
 
 config_map = {

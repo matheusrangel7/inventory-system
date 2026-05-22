@@ -1,9 +1,10 @@
-import secrets
 from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
 from sqlalchemy import select
+
 from app.extensions import db, ph, DUMMY_ARGON2_HASH
 from app.models.user import User
 from app.utils.audit import log_action
+from app.constants import MIN_PASSWORD_LENGTH
 
 
 def login_user(email: str, password: str) -> tuple[bool, str, User | None]:
@@ -38,6 +39,12 @@ def login_user(email: str, password: str) -> tuple[bool, str, User | None]:
 
 
 def complete_registration(token: str, new_password: str) -> tuple[bool, str]:
+    if len(new_password) < MIN_PASSWORD_LENGTH:
+        return (
+            False,
+            f"A password deve ter pelo menos {MIN_PASSWORD_LENGTH} caracteres.",
+        )
+
     user = db.session.execute(
         select(User).where(User.registration_token == token)
     ).scalar_one_or_none()
@@ -65,4 +72,5 @@ def complete_registration(token: str, new_password: str) -> tuple[bool, str]:
     )
 
     db.session.commit()
+
     return True, "Registo concluído com sucesso. Já pode fazer login."

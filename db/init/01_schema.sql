@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS users (
     registration_token CHAR(64),
     totp_secret VARCHAR(64),
     mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
@@ -30,12 +30,12 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     session_id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     refresh_token_hash VARCHAR(64) NOT NULL UNIQUE,
-    ip_adress INET,
+    ip_address INET,
     user_agent VARCHAR(500),
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMPTZ NOT NULL,
     revoked BOOLEAN NOT NULL DEFAULT FALSE,
-    revoked_at TIMESTAMP,
+    revoked_at TIMESTAMPTZ,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
@@ -69,11 +69,11 @@ CREATE TABLE IF NOT EXISTS assets (
     category_id INTEGER NOT NULL,
     location_id INTEGER NOT NULL,
     assigned_to VARCHAR(100),
-    assigned_at TIMESTAMP,
+    assigned_at TIMESTAMPTZ,
     asset_state asset_state_enum NOT NULL,
     last_maintenance DATE,
     maintenance_period_months INTEGER CHECK (maintenance_period_months > 0),
-    registered_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    registered_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     CHECK (
         (
@@ -109,6 +109,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     record_id INTEGER NOT NULL,
     old_value JSONB,
     new_value JSONB,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
 );
