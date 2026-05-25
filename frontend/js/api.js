@@ -9,18 +9,59 @@ async function parseResponse(response) {
     };
 }
 
+function shouldAttemptRefresh(path, options) {
+    if (options.skipRefresh) return false;
+
+    const authPathsWithoutRefresh = [
+        "/auth/login",
+        "/auth/logout",
+        "/auth/refresh",
+        "/auth/verify-mfa",
+        "/auth/enroll-mfa/setup",
+        "/auth/enroll-mfa/confirm",
+        "/auth/complete-registration",
+    ];
+
+    return !authPathsWithoutRefresh.includes(path);
+}
+
+async function refreshSession() {
+    const response = await fetch(`${API_BASE}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+            "Content-Type": "application/json",
+        },
+    });
+
+    const { ok, data } = await parseResponse(response);
+    return ok && data.success === true;
+}
+
 async function apiRequest(path, options = {}) {
+    const { skipRefresh, _retryingAfterRefresh, headers = {}, ...fetchOptions } = options;
+
     try {
         const response = await fetch(`${API_BASE}${path}`, {
             credentials: "include",
+            ...fetchOptions,
             headers: {
                 "Content-Type": "application/json",
-                ...(options.headers || {}),
+                ...headers,
             },
-            ...options,
         });
 
         const { ok, status, data } = await parseResponse(response);
+
+        if (status === 401 && !_retryingAfterRefresh && shouldAttemptRefresh(path, { skipRefresh })) {
+            const refreshed = await refreshSession();
+            if (refreshed) {
+                return apiRequest(path, {
+                    ...options,
+                    _retryingAfterRefresh: true,
+                });
+            }
+        }
 
         return {
             ok,
@@ -40,7 +81,6 @@ async function apiRequest(path, options = {}) {
             data: null,
         };
     }
-
 }
 
 const api = {

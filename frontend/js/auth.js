@@ -1,9 +1,9 @@
 const AUTH_PATHS = {
-    login: "/pages/auth/login.html",
-    enrollMfa: "/pages/auth/enroll-mfa.html",
-    register: "/pages/auth/firstlogin.html",
-    adminDashboard: "/pages/dashboard/admin/dashboard.html",
-    gestorDashboard: "/pages/dashboard/user/dashboard.html",
+    login: "/login",
+    enrollMfa: "/configurar-mfa",
+    register: "/primeiro-acesso",
+    adminDashboard: "/painel/admin",
+    gestorDashboard: "/painel/gestor",
 };
 
 function redirectToLogin() {
@@ -50,7 +50,7 @@ async function requireAuth() {
 
 async function logout() {
     try {
-        await api.post("/auth/logout");
+        await api.post("/auth/logout", null, { skipRefresh: true });
     } finally {
         redirectToLogin();
     }

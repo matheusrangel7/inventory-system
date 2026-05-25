@@ -73,6 +73,11 @@
             return;
         }
 
+        if (result.data?.mfa_setup_required) {
+            window.location.href = AUTH_PATHS.enrollMfa;
+            return;
+        }
+
         window.location.href = `${AUTH_PATHS.login}?registered=1`;
     });
 })();

@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS features (
     feature_name VARCHAR(50) NOT NULL,
     feature_type feature_type_enum NOT NULL DEFAULT 'text',
     category_id INTEGER NOT NULL,
+    is_multiple BOOLEAN NOT NULL DEFAULT FALSE,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     UNIQUE (feature_name, category_id),
     FOREIGN KEY (category_id) REFERENCES categories(category_id) ON DELETE RESTRICT
@@ -93,7 +94,7 @@ CREATE TABLE IF NOT EXISTS asset_specs (
     spec_id SERIAL PRIMARY KEY,
     feature_id INTEGER NOT NULL,
     asset_id INTEGER NOT NULL,
-    spec_value TEXT NOT NULL,
+    content JSONB NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     UNIQUE(feature_id, asset_id),
     FOREIGN KEY (feature_id) REFERENCES features(feature_id) ON DELETE RESTRICT,
