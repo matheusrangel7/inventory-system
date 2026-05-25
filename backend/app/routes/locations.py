@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify, request
 from app.services import location_service
 from app.utils.decorators import admin_required, get_current_role, get_current_user_id, manager_required
 from app.utils.responses import error, success
+from app.models.location import Location
 
 locations_bp = Blueprint("locations", __name__, url_prefix="/api/locations")
 
