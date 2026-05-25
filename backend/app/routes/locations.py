@@ -6,6 +6,12 @@ from app.utils.responses import error, success
 
 locations_bp = Blueprint("locations", __name__, url_prefix="/api/locations")
 
+def _location_to_dict(location: Location) -> dict:
+    return {
+        "location_id": location.location_id,
+        "location_name": location.location_name
+    }
+
 
 def parse_optional_int(value):
     if value is None or value == "":

@@ -38,7 +38,9 @@ def login_user(email: str, password: str) -> tuple[bool, str, User | None]:
     return True, "Login bem-sucedido.", user
 
 
-def complete_registration(token: str, new_password: str) -> tuple[bool, str, User | None]:
+def complete_registration(
+    token: str, new_password: str
+) -> tuple[bool, str, User | None]:
     if len(new_password) < MIN_PASSWORD_LENGTH:
         return (
             False,
@@ -74,4 +76,8 @@ def complete_registration(token: str, new_password: str) -> tuple[bool, str, Use
 
     db.session.commit()
 
-    return True, "Palavra-passe definida com sucesso. Configure a autenticação MFA para concluir o primeiro acesso.", user
+    return (
+        True,
+        "Palavra-passe definida com sucesso. Configure a autenticação MFA para concluir o primeiro acesso.",
+        user,
+    )
