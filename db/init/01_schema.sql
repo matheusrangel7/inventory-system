@@ -20,8 +20,23 @@ CREATE TABLE IF NOT EXISTS users (
     role user_role_enum NOT NULL DEFAULT 'Gestor',
     registration_status registration_status_enum NOT NULL DEFAULT 'Pendente',
     registration_token CHAR(64),
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    totp_secret VARCHAR(64),
+    mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+    session_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    refresh_token_hash VARCHAR(64) NOT NULL UNIQUE,
+    ip_address INET,
+    user_agent VARCHAR(500),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked BOOLEAN NOT NULL DEFAULT FALSE,
+    revoked_at TIMESTAMPTZ,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS locations (
@@ -43,6 +58,7 @@ CREATE TABLE IF NOT EXISTS features (
     feature_name VARCHAR(50) NOT NULL,
     feature_type feature_type_enum NOT NULL DEFAULT 'text',
     category_id INTEGER NOT NULL,
+    is_multiple BOOLEAN NOT NULL DEFAULT FALSE,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     UNIQUE (feature_name, category_id),
     FOREIGN KEY (category_id) REFERENCES categories(category_id) ON DELETE RESTRICT
@@ -54,11 +70,11 @@ CREATE TABLE IF NOT EXISTS assets (
     category_id INTEGER NOT NULL,
     location_id INTEGER NOT NULL,
     assigned_to VARCHAR(100),
-    assigned_at TIMESTAMP,
+    assigned_at TIMESTAMPTZ,
     asset_state asset_state_enum NOT NULL,
     last_maintenance DATE,
     maintenance_period_months INTEGER CHECK (maintenance_period_months > 0),
-    registered_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    registered_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     CHECK (
         (
@@ -78,7 +94,7 @@ CREATE TABLE IF NOT EXISTS asset_specs (
     spec_id SERIAL PRIMARY KEY,
     feature_id INTEGER NOT NULL,
     asset_id INTEGER NOT NULL,
-    spec_value TEXT NOT NULL,
+    content JSONB NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     UNIQUE(feature_id, asset_id),
     FOREIGN KEY (feature_id) REFERENCES features(feature_id) ON DELETE RESTRICT,
@@ -94,6 +110,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     record_id INTEGER NOT NULL,
     old_value JSONB,
     new_value JSONB,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
 );

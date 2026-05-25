@@ -1,0 +1,15 @@
+from flask import Blueprint, request
+
+from app.services import log_service
+from app.utils.decorators import admin_required
+from app.utils.responses import success
+
+logs_bp = Blueprint("logs", __name__, url_prefix="/api/logs")
+
+
+@logs_bp.route("/", methods=["GET"])
+@admin_required
+def list_logs():
+    limit = request.args.get("limit", default=200, type=int)
+    limit = max(1, min(limit or 200, 1000))
+    return success(data=log_service.get_all_logs(limit=limit))

@@ -46,9 +46,11 @@ services:
       - backend
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./frontend:/usr/share/nginx/html
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/certs:/etc/nginx/certs:ro
 
   mailhog:
     image: mailhog/mailhog

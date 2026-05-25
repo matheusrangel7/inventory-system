@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import Integer, String, DateTime, Enum, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
@@ -16,12 +16,12 @@ class AuditLog(Base):
         nullable=True,
     )
     origin: Mapped[str] = mapped_column(
-        String(50),
+        String(100),
         nullable=False,
         default="utilizador",
     )
     action: Mapped[str] = mapped_column(
-        Enum("INSERT", "UPDATE", "DELETE", name="audit_action"),
+        Enum("INSERT", "UPDATE", "DELETE", name="audit_action_enum"),
         nullable=False,
     )
     table_name: Mapped[str] = mapped_column(
@@ -41,5 +41,5 @@ class AuditLog(Base):
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )

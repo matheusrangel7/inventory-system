@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-store" />
+    <title>InvUBI - Configurar MFA</title>
+    <link rel="stylesheet" href="/css/tailwind.css">
+</head>
+
+<body class="bg-gradient-to-br from-slate-100 to-slate-200 min-h-screen flex items-center justify-center p-6 relative">
+
+    <header class="fixed top-6 left-6 flex items-center gap-3 select-none z-50">
+        <div class="flex gap-1">
+            <img src="../../assets/ubi-logo-dark.png" class="w-12 h-12 object-contain" alt="Logo UBI">
+        </div>
+        <span class="text-4xl font-extrabold tracking-wider" style="color: #002566;">InvUBI</span>
+    </header>
+
+    <main
+        class="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-xl shadow-slate-300/40 z-10">
+
+        <div class="flex flex-col items-center mb-6">
+            <h2 class="text-2xl font-black tracking-tight text-center" style="color: #002566;">
+                Autenticação de dois fatores
+            </h2>
+            <p class="text-xs text-slate-500 mt-1 text-center">
+                Escaneie o QR Code com a app autenticadora (Google Authenticator, Authy, etc.)
+            </p>
+        </div>
+
+        <p id="globalError"
+            class="hidden text-red-600 text-sm text-center font-semibold bg-red-50 border border-red-200 py-2 rounded-xl mb-4">
+        </p>
+
+        <div id="loadingQr" class="text-center text-slate-500 text-sm py-8">
+            A carregar QR Code...
+        </div>
+
+        <div id="enrollContent" class="hidden space-y-5">
+            <div class="flex justify-center">
+                <img id="qrImage" alt="QR Code MFA" class="w-48 h-48 border border-slate-200 rounded-lg" />
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold mb-2 text-slate-700 uppercase tracking-widest">
+                    Código de verificação
+                </label>
+                <input type="text" id="mfaCode" inputmode="numeric" pattern="[0-9]*" maxlength="6"
+                    autocomplete="one-time-code" placeholder="000000"
+                    class="w-full px-4 py-3 border border-slate-300 rounded-xl text-center text-lg tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900" />
+            </div>
+
+            <button type="button" id="confirmBtn"
+                class="w-full bg-blue-900 text-white py-3.5 rounded-xl font-bold uppercase tracking-wider hover:bg-blue-800 disabled:opacity-50">
+                Ativar MFA e entrar
+            </button>
+        </div>
+
+        <p class="text-center mt-4">
+            <a href="/login" class="text-sm text-slate-600 underline">Voltar ao login</a>
+        </p>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/enroll-mfa.js"></script>
+</body>
+
+</html>

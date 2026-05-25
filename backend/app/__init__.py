@@ -28,11 +28,15 @@ def create_app(config_name: str = None) -> Flask:
     from app.routes.assets import assets_bp
     from app.routes.locations import locations_bp
     from app.routes.users import users_bp
+    from app.routes.categories import categories_bp
+    from app.routes.logs import logs_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(assets_bp)
     app.register_blueprint(locations_bp)
     app.register_blueprint(users_bp)
+    app.register_blueprint(categories_bp)
+    app.register_blueprint(logs_bp)
 
     # Rota de Health Check
     @app.route("/api/health", methods=["GET"])

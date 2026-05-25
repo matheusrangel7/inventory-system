@@ -5,17 +5,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>InvUBI - Gestor Dashboard</title>
-    <link rel="stylesheet" href="../../../css/tailwind.css">
+    <link rel="stylesheet" href="/css/tailwind.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body class="bg-gray-100 h-screen overflow-hidden">
     <div class="flex h-full">
-        
+
         <div class="w-64 bg-blue-900 h-full p-4 flex flex-col flex-shrink-0">
             <div class="flex items-center gap-3 mb-8 p-2">
                 <div class="flex gap-1">
-                    <img src="../../../assets/ubi-logo-white.png" class="w-20 h-20">
+                    <img src="/assets/ubi-logo-white.png" class="w-20 h-20">
                 </div>
                 <h1 class="text-4xl text-white font-semibold">InvUBI</h1>
             </div>
@@ -23,32 +23,39 @@
             <nav class="flex-1">
                 <button onclick="showView('inicio')" id="btn-inicio"
                     class="w-full flex items-center gap-3 px-4 py-3 mb-2 rounded bg-white text-blue-900">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                     </svg>
                     <span>Página Inicial</span>
                 </button>
 
                 <button onclick="showView('ativos')" id="btn-ativos"
                     class="w-full flex items-center gap-3 px-4 py-3 mb-2 rounded text-white hover:bg-blue-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                     </svg>
                     <span>Ativos</span>
                 </button>
 
                 <button onclick="showView('salas')" id="btn-salas"
                     class="w-full flex items-center gap-3 px-4 py-3 mb-2 rounded text-white hover:bg-blue-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                     <span>Salas / Locais</span>
                 </button>
             </nav>
 
             <div class="mt-auto">
-                <button onclick="window.location.href='index.html'"
+                <button type="button" id="logoutBtn"
                     class="w-full bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors font-bold">
                     SAIR
                 </button>
@@ -56,12 +63,13 @@
         </div>
 
         <div class="flex-1 flex flex-col h-full min-w-0">
-            
+
             <header class="bg-white shadow-sm p-4 flex justify-between items-center flex-shrink-0">
                 <h1 class="text-xl font-bold" id="pageTitle">PÁGINA INICIAL</h1>
                 <div class="flex items-center gap-4">
-                    <span class="text-sm">abc@ubi.pt (Gestor)</span>
-                    <div class="w-10 h-10 bg-gray-600 text-white rounded-full flex items-center justify-center font-bold">
+                    <span class="text-sm" id="userEmail"></span>
+                    <div
+                        class="w-10 h-10 bg-gray-600 text-white rounded-full flex items-center justify-center font-bold" data-dashboard-avatar>
                         AG
                     </div>
                 </div>
@@ -111,28 +119,36 @@
                                     <td class="px-4 py-3">1</td>
                                     <td class="px-4 py-3">Computador</td>
                                     <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-yellow-100 text-yellow-800">Necessita Manutenção</span></td>
+                                    <td class="px-4 py-3"><span
+                                            class="px-2 py-1 rounded text-xs bg-yellow-100 text-yellow-800">Necessita
+                                            Manutenção</span></td>
                                     <td class="px-4 py-3">11/05/2026</td>
                                 </tr>
                                 <tr class="border-b">
                                     <td class="px-4 py-3">2</td>
                                     <td class="px-4 py-3">Servidor</td>
                                     <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-yellow-100 text-yellow-800">Necessita Manutenção</span></td>
+                                    <td class="px-4 py-3"><span
+                                            class="px-2 py-1 rounded text-xs bg-yellow-100 text-yellow-800">Necessita
+                                            Manutenção</span></td>
                                     <td class="px-4 py-3">11/05/2026</td>
                                 </tr>
                                 <tr class="border-b">
                                     <td class="px-4 py-3">3</td>
                                     <td class="px-4 py-3">Monitor</td>
                                     <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-orange-100 text-orange-800">Avariado</span></td>
+                                    <td class="px-4 py-3"><span
+                                            class="px-2 py-1 rounded text-xs bg-orange-100 text-orange-800">Avariado</span>
+                                    </td>
                                     <td class="px-4 py-3">11/05/2026</td>
                                 </tr>
                                 <tr class="border-b">
                                     <td class="px-4 py-3">4</td>
                                     <td class="px-4 py-3">Periféricos</td>
                                     <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-red-100 text-red-800">Para Abate</span></td>
+                                    <td class="px-4 py-3"><span
+                                            class="px-2 py-1 rounded text-xs bg-red-100 text-red-800">Para Abate</span>
+                                    </td>
                                     <td class="px-4 py-3">11/05/2026</td>
                                 </tr>
                             </tbody>
@@ -143,19 +159,30 @@
                 <div id="view-ativos" class="hidden">
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="text-2xl font-bold">ATIVOS</h2>
-                        <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        <button
+                            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 4v16m8-8H4" />
                             </svg>
                             NOVO ATIVO
                         </button>
                     </div>
 
                     <div class="bg-white p-4 rounded-lg shadow flex gap-4 mb-6">
-                        <select class="px-4 py-2 border rounded"><option>Todas</option></select>
-                        <select class="px-4 py-2 border rounded"><option>Todas</option></select>
-                        <select class="px-4 py-2 border rounded"><option>Todas</option></select>
-                        <select class="px-4 py-2 border rounded"><option>Todas</option></select>
+                        <select class="px-4 py-2 border rounded">
+                            <option>Todas</option>
+                        </select>
+                        <select class="px-4 py-2 border rounded">
+                            <option>Todas</option>
+                        </select>
+                        <select class="px-4 py-2 border rounded">
+                            <option>Todas</option>
+                        </select>
+                        <select class="px-4 py-2 border rounded">
+                            <option>Todas</option>
+                        </select>
                     </div>
 
                     <div class="bg-white p-6 rounded-lg shadow">
@@ -176,37 +203,53 @@
                                     <td class="px-4 py-3">1</td>
                                     <td class="px-4 py-3">Computador</td>
                                     <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-green-100 text-green-800">Bom</span></td>
+                                    <td class="px-4 py-3"><span
+                                            class="px-2 py-1 rounded text-xs bg-green-100 text-green-800">Bom</span>
+                                    </td>
                                     <td class="px-4 py-3">João Silva</td>
                                     <td class="px-4 py-3">11/05/2026</td>
-                                    <td class="px-4 py-3"><button class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">DETALHES</button></td>
+                                    <td class="px-4 py-3"><button
+                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">DETALHES</button>
+                                    </td>
                                 </tr>
                                 <tr class="border-b hover:bg-gray-50">
                                     <td class="px-4 py-3">2</td>
                                     <td class="px-4 py-3">Servidor</td>
                                     <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-green-100 text-green-800">Bom</span></td>
+                                    <td class="px-4 py-3"><span
+                                            class="px-2 py-1 rounded text-xs bg-green-100 text-green-800">Bom</span>
+                                    </td>
                                     <td class="px-4 py-3">-</td>
                                     <td class="px-4 py-3">11/05/2026</td>
-                                    <td class="px-4 py-3"><button class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">DETALHES</button></td>
+                                    <td class="px-4 py-3"><button
+                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">DETALHES</button>
+                                    </td>
                                 </tr>
                                 <tr class="border-b hover:bg-gray-50">
                                     <td class="px-4 py-3">3</td>
                                     <td class="px-4 py-3">Monitor</td>
                                     <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-orange-100 text-orange-800">Avariado</span></td>
+                                    <td class="px-4 py-3"><span
+                                            class="px-2 py-1 rounded text-xs bg-orange-100 text-orange-800">Avariado</span>
+                                    </td>
                                     <td class="px-4 py-3">-</td>
                                     <td class="px-4 py-3">11/05/2026</td>
-                                    <td class="px-4 py-3"><button class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">DETALHES</button></td>
+                                    <td class="px-4 py-3"><button
+                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">DETALHES</button>
+                                    </td>
                                 </tr>
                                 <tr class="border-b hover:bg-gray-50">
                                     <td class="px-4 py-3">4</td>
                                     <td class="px-4 py-3">Periféricos</td>
                                     <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-gray-100 text-gray-800">Para Abate</span></td>
+                                    <td class="px-4 py-3"><span
+                                            class="px-2 py-1 rounded text-xs bg-gray-100 text-gray-800">Para
+                                            Abate</span></td>
                                     <td class="px-4 py-3">-</td>
                                     <td class="px-4 py-3">11/05/2026</td>
-                                    <td class="px-4 py-3"><button class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">DETALHES</button></td>
+                                    <td class="px-4 py-3"><button
+                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">DETALHES</button>
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -216,7 +259,8 @@
                 <div id="view-salas" class="hidden">
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="text-2xl font-bold">ATIVOS</h2>
-                        <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold">FILTRAR</button>
+                        <button
+                            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold">FILTRAR</button>
                     </div>
 
                     <div class="bg-white p-6 rounded-lg shadow">
@@ -234,25 +278,33 @@
                                     <td class="px-4 py-3">SALA 1</td>
                                     <td class="px-4 py-3">6.10</td>
                                     <td class="px-4 py-3">40</td>
-                                    <td class="px-4 py-3"><button class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">VER ATIVOS</button></td>
+                                    <td class="px-4 py-3"><button
+                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">VER
+                                            ATIVOS</button></td>
                                 </tr>
                                 <tr class="border-b hover:bg-gray-50">
                                     <td class="px-4 py-3">SALA 2</td>
                                     <td class="px-4 py-3">6.9</td>
                                     <td class="px-4 py-3">20</td>
-                                    <td class="px-4 py-3"><button class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">VER ATIVOS</button></td>
+                                    <td class="px-4 py-3"><button
+                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">VER
+                                            ATIVOS</button></td>
                                 </tr>
                                 <tr class="border-b hover:bg-gray-50">
                                     <td class="px-4 py-3">SALA 3</td>
                                     <td class="px-4 py-3">6.6</td>
                                     <td class="px-4 py-3">150</td>
-                                    <td class="px-4 py-3"><button class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">VER ATIVOS</button></td>
+                                    <td class="px-4 py-3"><button
+                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">VER
+                                            ATIVOS</button></td>
                                 </tr>
                                 <tr class="border-b hover:bg-gray-50">
                                     <td class="px-4 py-3">SALA 4</td>
                                     <td class="px-4 py-3">6.7</td>
                                     <td class="px-4 py-3">70</td>
-                                    <td class="px-4 py-3"><button class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">VER ATIVOS</button></td>
+                                    <td class="px-4 py-3"><button
+                                            class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">VER
+                                            ATIVOS</button></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -261,6 +313,15 @@
             </main>
         </div>
     </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/dashboard.js"></script>
+    <script src="/js/gestor-dashboard.js"></script>
+    <script>
+        initGestorDashboard();
+    </script>
+    
 </body>
 
 </html>
