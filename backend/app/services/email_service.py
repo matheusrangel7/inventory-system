@@ -3,8 +3,8 @@ from flask_mail import Message
 from app.extensions import mail
 
 def send_registration_email(to_email: str, token: str) -> bool:
-    base_url = current_app.config.get("APP_BASE_URL", "http://localhost")
-    link = f"{base_url}/pages/auth/firstlogin.html?token={token}"
+    base_url = (current_app.config.get("APP_BASE_URL") or "http://localhost").rstrip("/")
+    link = f"{base_url}/primeiro-acesso?token={token}"
 
     msg = Message(
         subject="Conclusão do Registo — Sistema de Inventário",

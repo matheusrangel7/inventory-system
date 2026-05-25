@@ -214,12 +214,38 @@ def complete_registration():
     if not password or len(password) < 8:
         return error("A password deve ter pelo menos 8 caracteres", status=400)
 
-    ok, message = auth_service.complete_registration(token, password)
+    ok, message, user = auth_service.complete_registration(token, password)
 
     if not ok:
         return error(message, status=400)
 
-    return success(message=message)
+    if not user:
+        return error("Utilizador inválido.", status=400)
+
+    resp_body, status = success(
+        data={
+            "mfa_setup_required": True,
+            "next": "mfa_enrollment",
+            "user_id": user.user_id,
+            "email": user.email,
+            "role": user.role,
+        },
+        message=message,
+    )
+    response = make_response(resp_body, status)
+
+    clear_auth_cookies(response)
+    set_mfa_step_cookie(
+        response,
+        user.user_id,
+        {
+            "mfa_enrollment": True,
+            "registration_completed": True,
+            "role": user.role,
+        },
+    )
+
+    return response
 
 
 @auth_bp.route("/me", methods=["GET"])

@@ -38,11 +38,12 @@ def login_user(email: str, password: str) -> tuple[bool, str, User | None]:
     return True, "Login bem-sucedido.", user
 
 
-def complete_registration(token: str, new_password: str) -> tuple[bool, str]:
+def complete_registration(token: str, new_password: str) -> tuple[bool, str, User | None]:
     if len(new_password) < MIN_PASSWORD_LENGTH:
         return (
             False,
             f"A password deve ter pelo menos {MIN_PASSWORD_LENGTH} caracteres.",
+            None,
         )
 
     user = db.session.execute(
@@ -50,10 +51,10 @@ def complete_registration(token: str, new_password: str) -> tuple[bool, str]:
     ).scalar_one_or_none()
 
     if not user:
-        return False, "Link de registo inválido ou já utilizado."
+        return False, "Link de registo inválido ou já utilizado.", None
 
     if user.registration_status == "Concluído":
-        return False, "Este registo já foi concluído."
+        return False, "Este registo já foi concluído.", None
 
     new_hash = ph.hash(new_password)
 
@@ -73,4 +74,4 @@ def complete_registration(token: str, new_password: str) -> tuple[bool, str]:
 
     db.session.commit()
 
-    return True, "Registo concluído com sucesso. Já pode fazer login."
+    return True, "Palavra-passe definida com sucesso. Configure a autenticação MFA para concluir o primeiro acesso.", user
