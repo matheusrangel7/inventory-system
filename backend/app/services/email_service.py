@@ -1,9 +1,14 @@
 from flask import current_app
 from flask_mail import Message
 from app.extensions import mail
+from dateutil.relativedelta import relativedelta
+from app.models.inventory import Asset
+
 
 def send_registration_email(to_email: str, token: str) -> bool:
-    base_url = (current_app.config.get("APP_BASE_URL") or "http://localhost").rstrip("/")
+    base_url = (current_app.config.get("APP_BASE_URL") or "http://localhost").rstrip(
+        "/"
+    )
     link = f"{base_url}/primeiro-acesso?token={token}"
 
     msg = Message(
@@ -33,4 +38,57 @@ def send_registration_email(to_email: str, token: str) -> bool:
         return True
     except Exception as e:
         current_app.logger.error(f"Erro ao enviar email para {to_email}: {e}")
+        return False
+
+
+def send_maintenance_alert_email(to_email: str, asset: Asset):
+    due_date = asset.last_maintenance + relativedelta(
+        months=asset.maintenance_period_months
+    )
+    due_str = due_date.strftime("%d/%m/%Y")
+
+    subject = f"[InvUBI] Manutenção Necessária - Asset #{asset.asset_id}"
+
+    body_text = (
+        f"O seguinte equipamento atingiu o prazo de manutenção:\n\n"
+        f"Asset ID: #{asset.asset_id}\n"
+        f"Nº de Série: {asset.serial_number}\n"
+        f"Estado atual: Necessita Manutenção\n"
+        f"Data prevista: {due_str}\n\n"
+        f"Por favor proceda à manutenção assim que possível e atualize o estado "
+        f"no sistema de inventário.\n\n"
+        f"Este email foi gerado automaticamente pelo InvUBI."
+    )
+
+    body_html = (
+        f"<p>O seguinte equipamento atingiu o prazo de manutenção:</p>"
+        f"<table style='border-collapse:collapse;font-family:sans-serif;'>"
+        f"<tr><td style='padding:4px 12px 4px 0;font-weight:bold;'>Asset ID</td>"
+        f"<td>#{asset.asset_id}</td></tr>"
+        f"<tr><td style='padding:4px 12px 4px 0;font-weight:bold;'>Nº de Série</td>"
+        f"<td>{asset.serial_number}</td></tr>"
+        f"<tr><td style='padding:4px 12px 4px 0;font-weight:bold;'>Estado atual</td>"
+        f"<td style='color:#b45309;font-weight:bold;'>Necessita Manutenção</td></tr>"
+        f"<tr><td style='padding:4px 12px 4px 0;font-weight:bold;'>Data prevista</td>"
+        f"<td>{due_str}</td></tr>"
+        f"</table>"
+        f"<p>Por favor proceda à manutenção assim que possível e atualize o estado "
+        f"no <strong>sistema de inventário</strong>.</p>"
+        f"<small style='color:#6b7280;'>Este email foi gerado automaticamente pelo InvUBI.</small>"
+    )
+
+    msg = Message(
+        subject=subject,
+        recipients=[to_email],
+        body=body_text,
+        html=body_html,
+    )
+
+    try:
+        mail.send(msg)
+        return True
+    except Exception as ex:
+        current_app.logger.error(
+            f"Erro ao enviar alerta de manutenção para {to_email}: {ex}"
+        )
         return False
