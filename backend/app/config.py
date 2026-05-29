@@ -1,6 +1,16 @@
 import os
 from datetime import timedelta
+
 from app.constants import ACCESS_TOKEN_MINUTES, REFRESH_TOKEN_DAYS
+
+
+def env_bool(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+
+    if value is None:
+        return default
+
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 class Config:
@@ -13,28 +23,46 @@ class Config:
     DB_PORT = os.environ.get("DB_PORT", "5432")
     DB_NAME = os.environ.get("DB_NAME", "inventory_db")
 
+    DATABASE_URL = (
+        f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}"
+        f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    )
+
     SQLALCHEMY_ENGINES = {
-        "default": (
-            f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}"
-            f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-        )
+        "default": DATABASE_URL,
     }
 
+    SQLALCHEMY_DATABASE_URI = DATABASE_URL
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+
     JWT_TOKEN_LOCATION = ["cookies"]
-    JWT_COOKIE_SECURE = True
-    JWT_COOKIE_SAMESITE = "Strict"
-    JWT_COOKIE_CSRF_PROTECT = False
+
+    # HTTPS local:
+    JWT_COOKIE_SECURE=True
+    #
+    # HTTP local:
+    # JWT_COOKIE_SECURE=false
+
+    JWT_COOKIE_SECURE = env_bool("JWT_COOKIE_SECURE", False)
+    JWT_COOKIE_SAMESITE = os.environ.get("JWT_COOKIE_SAMESITE", "Lax")
+    JWT_COOKIE_CSRF_PROTECT = env_bool("JWT_COOKIE_CSRF_PROTECT", False)
+
+    JWT_ACCESS_COOKIE_PATH = "/api/"
+    JWT_REFRESH_COOKIE_PATH = "/api/auth/refresh"
 
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=ACCESS_TOKEN_MINUTES)
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=REFRESH_TOKEN_DAYS)
     REFRESH_TOKEN_EXPIRES_DAYS = REFRESH_TOKEN_DAYS
 
     MAIL_SERVER = os.environ.get("MAIL_SERVER", "mailhog")
-    MAIL_PORT = int(os.environ.get("MAIL_PORT", 1025))
-    MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "false").lower() == "true"
-    MAIL_USERNAME = os.environ.get("MAIL_USERNAME")
-    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD")
+    MAIL_PORT = int(os.environ.get("MAIL_PORT", "1025"))
+    MAIL_USE_TLS = env_bool("MAIL_USE_TLS", False)
+    MAIL_USE_SSL = env_bool("MAIL_USE_SSL", False)
+    MAIL_USERNAME = os.environ.get("MAIL_USERNAME") or None
+    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD") or None
     MAIL_DEFAULT_SENDER = os.environ.get(
-        "MAIL_DEFAULT_SENDER", "sistema@universidade.pt"
+        "MAIL_DEFAULT_SENDER",
+        "no-reply@invubi.local",
     )
 
     APP_BASE_URL = os.environ.get("APP_BASE_URL", "https://localhost")
@@ -42,13 +70,12 @@ class Config:
 
 class DevelopmentConfig(Config):
     DEBUG = True
-    JWT_COOKIE_SECURE = False
 
 
 class ProductionConfig(Config):
     DEBUG = False
-    JWT_COOKIE_CSRF_PROTECT = True
-
+    JWT_COOKIE_SECURE = env_bool("JWT_COOKIE_SECURE", True)
+    JWT_COOKIE_CSRF_PROTECT = env_bool("JWT_COOKIE_CSRF_PROTECT", True)
 
 
 config_map = {

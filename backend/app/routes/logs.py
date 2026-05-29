@@ -2,7 +2,7 @@ from flask import Blueprint, request
 
 from app.services import log_service
 from app.utils.decorators import admin_required
-from app.utils.responses import success
+from app.utils.responses import error, success
 
 logs_bp = Blueprint("logs", __name__, url_prefix="/api/logs")
 
@@ -13,3 +13,12 @@ def list_logs():
     limit = request.args.get("limit", default=200, type=int)
     limit = max(1, min(limit or 200, 1000))
     return success(data=log_service.get_all_logs(limit=limit))
+
+
+@logs_bp.route("/<int:log_id>", methods=["GET"])
+@admin_required
+def get_log(log_id: int):
+    log = log_service.get_log_by_id(log_id)
+    if not log:
+        return error("Registo de auditoria não encontrado.", status=404)
+    return success(data=log)

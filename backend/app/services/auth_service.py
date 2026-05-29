@@ -15,9 +15,10 @@ def login_user(email: str, password: str) -> tuple[bool, str, User | None]:
 
     if not user:
         try:
-            ph.verify(DUMMY_ARGON2_HASH, "CR7")
-        except Exception:
-            pass
+            ph.verify(DUMMY_ARGON2_HASH, password or "invalid-password")
+        except (VerifyMismatchError, VerificationError, InvalidHashError):
+            return False, "Credenciais inválidas", None
+
         return False, "Credenciais inválidas", None
 
     try:
