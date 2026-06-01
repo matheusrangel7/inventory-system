@@ -29,7 +29,7 @@ def check_maintenance() -> int:
 
     due_assets: list[Asset] = []
     for asset in assets:
-        due_date = asset.last_maintenance + relativedelta(month=asset.maintenance_period_months)
+        due_date = asset.last_maintenance + relativedelta(months=asset.maintenance_period_months)
         if today >= due_date:
             due_assets.append(asset)
 
@@ -37,9 +37,32 @@ def check_maintenance() -> int:
         logger.info("[Scheduler] Nenhum asset necessita de manutenção.")
         return 0
     
-    logger.info(f"[Scheduler] {len(due_assets)} asset(s) a atualizar.")
+    logger.info(f"[Scheduler] {len(due_assets)} asset(s) a verificar.")
 
+    updated_count = 0
     for asset in due_assets:
+        recipient = _get_recipient_email(asset.location_id)
+        if not recipient:
+            logger.warning(
+                f"[Scheduler] Asset {asset.asset_id}: sem destinatário de email."
+            )
+            continue
+
+        due_date = asset.last_maintenance + relativedelta(
+            months=asset.maintenance_period_months
+        )
+        email_sent = send_maintenance_alert_email(
+            to_email=recipient,
+            asset_id=asset.asset_id,
+            serial_number=asset.serial_number,
+            due_date_str=due_date.strftime("%d/%m/%Y"),
+        )
+        if not email_sent:
+            logger.error(
+                f"[Scheduler] Falha ao enviar email para asset {asset.asset_id}."
+            )
+            continue
+
         old_state = asset.asset_state
         asset.asset_state = "Necessita Manutenção"
 
@@ -52,28 +75,13 @@ def check_maintenance() -> int:
             old_value={"asset_state": old_state},
             new_value={"asset_state": "Necessita Manutenção"},
         )
+        db.session.commit()
+        updated_count += 1
+        logger.info(
+            f"[Scheduler] Email enviado para {recipient} e asset {asset.asset_id} atualizado."
+        )
 
-    db.session.commit()
-    logger.info("[Scheduler] Estados atualizados e commit efetuado.")
-
-    for asset in due_assets:
-        recipient = _get_recipient_email(asset.location_id)
-        if not recipient:
-            logger.warning(
-                f"[Scheduler] Asset {asset.asset_id}: sem destinatário de email."
-            )
-            continue
-        try:
-            send_maintenance_alert_email(to_email=recipient, asset=asset)
-            logger.info(
-                f"[Scheduler] Email enviado para {recipient} - asset {asset.asset_id}."
-            )
-        except Exception as ex:
-            logger.error(
-                f"[Scheduler] Falha ao enviar email para asset {asset.asset_id}: {ex}"
-            )
-
-    return len(due_assets)
+    return updated_count
 
 
 def _get_recipient_email(location_id: int) -> str | None:

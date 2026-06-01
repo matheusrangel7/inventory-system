@@ -64,7 +64,7 @@ def _init_scheduler(app: Flask) -> None:
 
     scheduler = BackgroundScheduler(timezone="Europe/Lisbon")
 
-    def run_check_maintenace():
+    def run_check_maintenance():
         with app.app_context():
             try:
                 updated = check_maintenance()
@@ -76,21 +76,21 @@ def _init_scheduler(app: Flask) -> None:
                     f"[Scheduler] Erro no job de manutenção: {ex}", exc_info=True
                 )
 
-        scheduler.add_job(
-            func=run_check_maintenace,
-            trigger=CronTrigger(hour=8, minute=0),
-            id="maintenance_check",
-            replace_existing=True,
-            misfire_grace_time=3600,
-        )
+    scheduler.add_job(
+        func=run_check_maintenance,
+        trigger=CronTrigger(hour=8, minute=0),
+        id="maintenance_check",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
 
     scheduler.start()
-    logger.info(f"[Scheduler] Scheduler de manutenção iniciado (cron: 08:00 diário).")
+    logger.info("[Scheduler] Scheduler de manutenção iniciado (cron: 08:00 diário).")
 
     atexit.register(lambda: _shutdown_scheduler(scheduler))
 
 
 def _shutdown_scheduler(scheduler: BackgroundScheduler) -> None:
-    if scheduler.running():
+    if scheduler.running:
         scheduler.shutdown(wait=False)
         logger.info("[Scheduler] Scheduler desligado.")
