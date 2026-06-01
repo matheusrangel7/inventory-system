@@ -1,6 +1,7 @@
 from flask import Blueprint, request
 
 from app.services import log_service
+from app.services.scheduler_service import check_maintenance
 from app.utils.decorators import admin_required
 from app.utils.responses import error, success
 
@@ -13,6 +14,16 @@ def list_logs():
     limit = request.args.get("limit", default=200, type=int)
     limit = max(1, min(limit or 200, 1000))
     return success(data=log_service.get_all_logs(limit=limit))
+
+
+@logs_bp.route("/trigger-maintenance-check", methods=["POST"])
+@admin_required
+def trigger_maintenance_check():
+    updated = check_maintenance()
+    return success(
+        message=f"Verificação concluída. {updated} asset(s) atualizados.",
+        data={"updated_count": updated},
+    )
 
 
 @logs_bp.route("/<int:log_id>", methods=["GET"])
