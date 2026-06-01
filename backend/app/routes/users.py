@@ -7,6 +7,10 @@ from app.utils.responses import error, success
 users_bp = Blueprint("users", __name__, url_prefix="/api/users")
 
 
+def _is_allowed_create_user_role(role: str | None) -> bool:
+    return role is None or role == "Gestor"
+
+
 @users_bp.route("/", methods=["GET"])
 @admin_required
 def list_users():
@@ -30,9 +34,9 @@ def create_user():
     role = data.get("role")
     location_ids = data.get("location_ids", [])
 
-    if role == "Administrador":
+    if not _is_allowed_create_user_role(role):
         return error(
-            "Administradores só podem ser criados pelo fluxo de transferência.",
+            "Apenas gestores podem ser criados por esta rota.",
             status=400,
         )
 

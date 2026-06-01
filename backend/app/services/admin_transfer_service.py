@@ -1,5 +1,6 @@
 from flask_jwt_extended import decode_token
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
 from app.models.admin_transfer import PendingAdminTransfer
@@ -159,8 +160,6 @@ def transfer_to_existing_admin(
     target_old = {"role": target.role}
 
     current.role = "Gestor"
-    target.role = "Administrador"
-
     log_action(
         "UPDATE",
         "users",
@@ -169,6 +168,14 @@ def transfer_to_existing_admin(
         old_value=current_old,
         new_value={"role": current.role},
     )
+
+    try:
+        db.session.flush()
+    except IntegrityError:
+        db.session.rollback()
+        return False, "Não foi possível libertar a função de administrador atual."
+
+    target.role = "Administrador"
     log_action(
         "UPDATE",
         "users",
@@ -178,7 +185,11 @@ def transfer_to_existing_admin(
         new_value={"role": target.role},
     )
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return False, "Não foi possível concluir a transferência de administração."
 
     session_service.revoke_all_sessions(current.user_id)
     session_service.revoke_all_sessions(target.user_id)
@@ -201,20 +212,31 @@ def start_transfer_to_new_admin(
     if not current or current.role != "Administrador" or not current.is_active:
         return False, "Administrador atual inválido.", None
 
-    (
-        ok,
-        message,
-        target,
-        token,
-    ) = user_service.create_pending_user(
-        email=email,
-        role="Gestor",
-        location_ids=[],
-        actor_id=current_admin_id,
-        require_locations=False,
-    )
-    if not ok:
-        return False, message, None
+    existing = db.session.execute(select(User).where(User.email == email)).scalar_one_or_none()
+    if existing:
+        ok, message, target, token = user_service.reactivate_inactive_gestor_invite(
+            email=email,
+            location_ids=[],
+            admin_id=current_admin_id,
+            allow_completed=False,
+        )
+        if not ok:
+            return False, message, None
+    else:
+        (
+            ok,
+            message,
+            target,
+            token,
+        ) = user_service.create_pending_user(
+            email=email,
+            role="Gestor",
+            location_ids=[],
+            actor_id=current_admin_id,
+            require_locations=False,
+        )
+        if not ok:
+            return False, message, None
 
     transfer = PendingAdminTransfer(
         initiated_by=current_admin_id, target_user_id=target.user_id
@@ -386,11 +408,6 @@ def complete_pending_after_mfa(target_user_id: int) -> bool:
     }
 
     old_admin.role = "Gestor"
-    new_admin.role = "Administrador"
-    new_admin.registration_status = "Concluído"
-
-    db.session.delete(transfer)
-
     log_action(
         action="UPDATE",
         table_name="users",
@@ -399,6 +416,18 @@ def complete_pending_after_mfa(target_user_id: int) -> bool:
         old_value=old_admin_old_value,
         new_value={"role": "Gestor"},
     )
+
+    try:
+        db.session.flush()
+    except IntegrityError:
+        db.session.rollback()
+        return False
+
+    new_admin.role = "Administrador"
+    new_admin.registration_status = "Concluído"
+
+    db.session.delete(transfer)
+
     log_action(
         action="UPDATE",
         table_name="users",
@@ -419,7 +448,11 @@ def complete_pending_after_mfa(target_user_id: int) -> bool:
         new_value={"completed": True},
     )
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return False
 
     session_service.revoke_all_sessions(old_admin.user_id)
     session_service.revoke_all_sessions(new_admin.user_id)

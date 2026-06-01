@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.extensions import db, ph
 from app.models.location import Location
 from app.models.user import User
-from app.services import email_service
+from app.services import email_service, session_service
 from app.services.registration_token_service import (
     clear_registration_token,
     issue_registration_token,
@@ -221,6 +221,72 @@ def _create_gestor_error_status(message: str) -> int:
     return 400
 
 
+def _can_reactivate_inactive_gestor(user: User | None, allow_completed: bool) -> bool:
+    if not user:
+        return False
+    if user.is_active or user.role != "Gestor":
+        return False
+    if user.registration_status == "Pendente":
+        return True
+    return allow_completed and user.registration_status == "Concluído"
+
+
+def _reset_completed_gestor_for_invite(user: User) -> None:
+    random_password = secrets.token_urlsafe(32)
+    user.password_hash = ph.hash(random_password)
+    del random_password
+    user.totp_secret = None
+    user.mfa_enabled = False
+
+
+def _is_completed_registration_email_change(user: User, email: str) -> bool:
+    return user.registration_status == "Concluído" and email != user.email
+
+
+def reactivate_inactive_gestor_invite(
+    email: str,
+    location_ids: list[int],
+    admin_id: int,
+    allow_completed: bool = False,
+) -> tuple[bool, str, User | None, str | None]:
+    user = db.session.execute(select(User).where(User.email == email)).scalar_one_or_none()
+    if not user:
+        return False, "Utilizador não encontrado.", None, None
+
+    if not _can_reactivate_inactive_gestor(user, allow_completed):
+        return False, "Já existe um utilizador com este email.", None, None
+
+    ok, message, locations = _get_active_locations(location_ids)
+    if not ok:
+        return False, message, None, None
+
+    old_value = _user_audit_dict(user)
+
+    if user.registration_status == "Concluído":
+        _reset_completed_gestor_for_invite(user)
+
+    user.is_active = True
+    user.registration_status = "Pendente"
+    token = issue_registration_token(user)
+    _assign_locations_to_user(user, locations)
+
+    new_value = {
+        **_user_audit_dict(user),
+        "location_ids": location_ids,
+    }
+
+    log_action(
+        action="UPDATE",
+        table_name="users",
+        record_id=user.user_id,
+        user_id=admin_id,
+        old_value=old_value,
+        new_value=new_value,
+    )
+
+    return True, "Utilizador reativado.", user, token
+
+
 def create_gestor(
     email: str, location_ids: list[int], admin_id: int
 ) -> tuple[bool, str, User | None, int]:
@@ -231,23 +297,41 @@ def create_gestor(
         actor_id=admin_id,
     )
     if not ok:
-        return False, message, None, _create_gestor_error_status(message)
+        if "Já existe" not in message:
+            return False, message, None, _create_gestor_error_status(message)
+
+        ok, message, user, token = reactivate_inactive_gestor_invite(
+            _clean_email(email),
+            location_ids or [],
+            admin_id,
+            allow_completed=True,
+        )
+        if not ok:
+            return False, message, None, _create_gestor_error_status(message)
+
+    success_prefix = (
+        "Utilizador criado."
+        if message == "Utilizador pendente criado."
+        else message
+    )
 
     db.session.commit()
+
+    session_service.revoke_all_sessions(user.user_id)
 
     email_sent = email_service.send_registration_email(user.email, token)
     if not email_sent:
         return (
             True,
             (
-                "Utilizador criado, mas o email não foi enviado. "
+                f"{success_prefix} Mas o email não foi enviado. "
                 "Pode reenviar o email na lista de utilizadores."
             ),
             user,
             201,
         )
 
-    return True, "Utilizador criado e email de registo enviado com sucesso.", user, 201
+    return True, f"{success_prefix} Email de registo enviado com sucesso.", user, 201
 
 
 def update_user(
@@ -284,6 +368,14 @@ def update_user(
     if not email:
         return False, "Email é obrigatório.", None
 
+    email_changed = email != user.email
+    if _is_completed_registration_email_change(user, email):
+        return (
+            False,
+            "Email de utilizador com registo concluído não pode ser alterado.",
+            None,
+        )
+
     existing = db.session.execute(
         select(User).where(User.email == email, User.user_id != user_id)
     ).scalar_one_or_none()
@@ -298,6 +390,7 @@ def update_user(
     user.email = email
     user.role = role
     _assign_locations_to_user(user, locations)
+    token = issue_registration_token(user) if email_changed else None
 
     new_value = _user_audit_dict(user)
     log_action(
@@ -309,6 +402,25 @@ def update_user(
         new_value=new_value,
     )
     db.session.commit()
+
+    if token:
+        email_sent = email_service.send_registration_email(user.email, token)
+        if not email_sent:
+            return (
+                True,
+                (
+                    "Utilizador atualizado com sucesso. Mas o email de registo "
+                    "não foi enviado. Pode reenviar o email na lista de utilizadores."
+                ),
+                user,
+            )
+
+        return (
+            True,
+            "Utilizador atualizado com sucesso. Email de registo reenviado.",
+            user,
+        )
+
     return True, "Utilizador atualizado com sucesso.", user
 
 
