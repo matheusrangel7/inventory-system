@@ -111,11 +111,12 @@ def get_all_categories(include_features: bool = False) -> list[Category] | list[
     return categories
 
 
-def get_features_by_category(category_id: int) -> list[Feature]:
+def get_features_by_category(category_id: int, include_inactive: bool = False) -> list[Feature]:
+    query = select(Feature).where(Feature.category_id == category_id)
+    if not include_inactive:
+        query = query.where(Feature.is_active == True)
     return db.session.execute(
-        select(Feature)
-        .where(Feature.category_id == category_id, Feature.is_active == True)
-        .order_by(Feature.feature_name.asc())
+        query.order_by(Feature.feature_name.asc())
     ).scalars().all()
 
 
@@ -482,9 +483,8 @@ def _get_specs_for_asset(asset_id: int) -> tuple[dict, list[dict]]:
         .where(
             AssetSpec.asset_id == asset_id,
             AssetSpec.is_active == True,
-            Feature.is_active == True,
         )
-        .order_by(Feature.feature_name.asc())
+        .order_by(Feature.is_active.desc(), Feature.feature_name.asc())
     ).all()
 
     specs: dict[str, Any] = {}
@@ -492,6 +492,7 @@ def _get_specs_for_asset(asset_id: int) -> tuple[dict, list[dict]]:
     for feature, spec in rows:
         value = spec.content
         is_multiple = bool(getattr(feature, "is_multiple", False))
+        feature_is_active = bool(getattr(feature, "is_active", False))
         specs[feature.feature_name] = value
         details.append({
             "spec_id": spec.spec_id,
@@ -500,6 +501,9 @@ def _get_specs_for_asset(asset_id: int) -> tuple[dict, list[dict]]:
             "feature_type": feature.feature_type,
             "is_multiple": is_multiple,
             "is_repeatable": is_multiple,
+            "feature_is_active": feature_is_active,
+            "feature_status": "Ativa" if feature_is_active else "Desativada",
+            "is_archived_feature": not feature_is_active,
             "content": value,
             "spec_value": value,
         })
@@ -793,6 +797,8 @@ def create_asset(
     parsed_last_maintenance = _parse_date(last_maintenance)
     if last_maintenance and not parsed_last_maintenance:
         return False, "Data de última manutenção inválida.", None
+    if parsed_last_maintenance is None:
+        parsed_last_maintenance = date.today()
 
     ok, normalized_specs, validation_error = _normalize_specs(category_id, specs)
     if not ok:
@@ -875,6 +881,10 @@ def update_asset(
     if last_maintenance and not parsed_last_maintenance:
         return False, "Data de última manutenção inválida.", None
 
+    old_asset_state = asset.asset_state
+    if state == "Bom Estado" and old_asset_state != "Bom Estado":
+        parsed_last_maintenance = date.today()
+
     ok, normalized_specs, validation_error = _normalize_specs(category_id, specs)
     if not ok:
         return False, validation_error or "Características inválidas.", None
@@ -903,8 +913,13 @@ def update_asset(
             spec.is_active = True
         else:
             db.session.add(AssetSpec(feature_id=feature_id, asset_id=asset_id, content=value, is_active=True))
+
     for spec in existing_specs:
-        if spec.feature_id not in normalized_specs:
+        if spec.feature_id in normalized_specs:
+            continue
+
+        feature = db.session.get(Feature, spec.feature_id)
+        if not feature or feature.category_id != category_id or feature.is_active:
             spec.is_active = False
 
     db.session.flush()

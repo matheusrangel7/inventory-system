@@ -94,4 +94,14 @@ const api = {
             ...options,
         });
     },
+    put(path, body, options = {}) {
+        return apiRequest(path, {
+            method: "PUT",
+            body: body ? JSON.stringify(body) : undefined,
+            ...options,
+        });
+    },
+    delete(path, options = {}) {
+        return apiRequest(path, { method: "DELETE", ...options });
+    },
 };

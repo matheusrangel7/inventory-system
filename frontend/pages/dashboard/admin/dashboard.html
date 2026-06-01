@@ -7,439 +7,14 @@
     <title>InvUBI - Admin Dashboard</title>
     <link rel="stylesheet" href="/css/tailwind.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    <style>
-        .admin-modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            right: 0;
-            bottom: 0;
-            left: 0;
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.40);
-            padding: clamp(0.75rem, 2vw, 1.25rem);
-            overflow-y: auto;
-        }
-
-        .admin-modal.admin-modal-open {
-            display: flex !important;
-        }
-
-        .admin-modal > div {
-            width: min(100%, 42rem);
-            max-height: min(90dvh, 760px);
-            overflow: hidden;
-            margin: auto;
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-        }
-
-        #modalAtivo > div {
-            width: min(100%, 56rem);
-        }
-
-        .admin-modal form {
-            min-height: 0;
-            overflow-y: auto;
-            overflow-x: hidden;
-            padding-right: 0.25rem;
-        }
-
-        .admin-modal input,
-        .admin-modal select,
-        .admin-modal textarea,
-        .admin-modal button {
-            max-width: 100%;
-            min-width: 0;
-        }
-
-        .admin-modal button {
-            white-space: normal;
-        }
-
-        .admin-modal .modal-header {
-            flex-shrink: 0;
-        }
-
-        .admin-modal-actions {
-            flex-wrap: wrap;
-            position: sticky;
-            bottom: 0;
-            background: #ffffff;
-            padding-top: 0.75rem;
-        }
-
-        .table-shell {
-            overflow-x: auto;
-            width: 100%;
-        }
-
-        .table-pagination {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.75rem;
-            margin-top: 1rem;
-            border-top: 1px solid #e5e7eb;
-            padding-top: 1rem;
-        }
-
-        .table-pagination-info {
-            color: #4b5563;
-            font-size: 0.875rem;
-            font-weight: 600;
-        }
-
-        .table-pagination-actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-        }
-
-        .table-pagination-button {
-            border: 2px solid #1e3a8a;
-            border-radius: 0.5rem;
-            color: #1e3a8a;
-            background: #ffffff;
-            font-size: 0.75rem;
-            font-weight: 800;
-            padding: 0.5rem 0.75rem;
-            text-transform: uppercase;
-            transition: background 150ms ease, color 150ms ease, opacity 150ms ease;
-        }
-
-        .table-pagination-button:not(:disabled):hover {
-            background: #eff6ff;
-        }
-
-        .table-pagination-button:disabled {
-            cursor: not-allowed;
-            opacity: 0.45;
-        }
-
-
-        #modalCategoria > div {
-            width: min(100%, 40rem);
-            max-width: 40rem !important;
-        }
-
-        .category-features-box {
-            border: 1px solid #bfdbfe;
-            border-radius: 0.75rem;
-            background: rgba(239, 246, 255, 0.45);
-            padding: 1rem;
-        }
-
-        .category-features-header {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 1rem;
-            margin-bottom: 0.75rem;
-        }
-
-        .category-features-header-title {
-            min-width: 0;
-        }
-
-        .category-add-feature-button {
-            flex: 0 0 auto;
-            min-width: 7.25rem;
-            white-space: nowrap !important;
-            border: 2px solid #1e3a8a;
-            border-radius: 0.5rem;
-            background: #ffffff;
-            color: #1e3a8a;
-            font-size: 0.75rem;
-            font-weight: 800;
-            padding: 0.55rem 0.75rem;
-            text-transform: uppercase;
-        }
-
-        .category-feature-row {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(8rem, 10rem);
-            gap: 0.75rem;
-            align-items: end;
-        }
-
-        .category-feature-field {
-            min-width: 0;
-        }
-
-        .category-feature-field label {
-            display: block;
-            margin-bottom: 0.25rem;
-            color: #1e3a8a;
-            font-size: 0.68rem;
-            font-weight: 800;
-            line-height: 1.1;
-            text-transform: uppercase;
-        }
-
-        .category-feature-field input,
-        .category-feature-field select {
-            width: 100%;
-        }
-
-        .category-feature-repeatable {
-            min-height: 2.65rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            border: 2px solid #dbeafe;
-            border-radius: 0.5rem;
-            background: rgba(239, 246, 255, 0.55);
-            padding: 0.55rem 0.75rem;
-            color: #1e3a8a;
-            font-size: 0.75rem;
-            font-weight: 800;
-            text-transform: uppercase;
-            white-space: nowrap;
-        }
-
-        .category-feature-repeatable input {
-            width: 1rem;
-            height: 1rem;
-            flex: 0 0 auto;
-        }
-
-        .category-feature-remove {
-            min-height: 2.65rem;
-            white-space: nowrap !important;
-            border: 2px solid #dc2626;
-            border-radius: 0.5rem;
-            color: #dc2626;
-            background: #ffffff;
-            font-size: 0.75rem;
-            font-weight: 800;
-            padding: 0.55rem 0.75rem;
-            text-transform: uppercase;
-        }
-
-        .category-feature-remove:hover {
-            background: #fef2f2;
-        }
-
-        .asset-spec-value-row {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
-            gap: 0.5rem;
-            align-items: start;
-        }
-
-
-        .asset-advanced-filters {
-            border: 1px solid #dbeafe;
-            border-radius: 0.75rem;
-            background: rgba(239, 246, 255, 0.45);
-            padding: 1rem;
-            margin-bottom: 1.25rem;
-        }
-
-        .asset-advanced-filters-header {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.75rem;
-            margin-bottom: 0.75rem;
-        }
-
-        .asset-spec-filter-row {
-            display: grid;
-            grid-template-columns: minmax(12rem, 1.2fr) minmax(10rem, 0.9fr) minmax(12rem, 1fr) auto;
-            gap: 0.75rem;
-            align-items: end;
-            border: 1px solid #dbeafe;
-            border-radius: 0.75rem;
-            background: #ffffff;
-            padding: 0.75rem;
-        }
-
-        .asset-spec-filter-row label {
-            display: block;
-            margin-bottom: 0.25rem;
-            color: #1e3a8a;
-            font-size: 0.68rem;
-            font-weight: 800;
-            line-height: 1.1;
-            text-transform: uppercase;
-        }
-
-        .asset-spec-filter-row select,
-        .asset-spec-filter-row input {
-            width: 100%;
-            min-height: 2.35rem;
-            border: 2px solid #1e3a8a;
-            border-radius: 0.5rem;
-            padding: 0.45rem 0.65rem;
-            font-size: 0.875rem;
-            outline: none;
-        }
-
-        .asset-spec-filter-remove {
-            min-height: 2.35rem;
-            border: 2px solid #dc2626;
-            border-radius: 0.5rem;
-            color: #dc2626;
-            background: #ffffff;
-            font-size: 0.75rem;
-            font-weight: 800;
-            padding: 0.55rem 0.75rem;
-            text-transform: uppercase;
-            white-space: nowrap !important;
-        }
-
-        .asset-spec-filter-empty {
-            color: #6b7280;
-            font-size: 0.875rem;
-        }
-
-
-        @media (max-height: 640px) {
-            .admin-modal {
-                align-items: flex-start;
-            }
-        }
-
-        @media (max-width: 640px) {
-            .admin-modal > div {
-                max-height: calc(100dvh - 1.5rem);
-                padding: 1rem !important;
-            }
-
-            .admin-modal .modal-header {
-                align-items: flex-start;
-                gap: 0.75rem;
-            }
-
-            .admin-modal-actions {
-                justify-content: stretch;
-            }
-
-            .admin-modal-actions button {
-                flex: 1 1 100%;
-            }
-
-
-            .category-features-header {
-                flex-direction: column;
-            }
-
-            .category-add-feature-button {
-                width: 100%;
-            }
-
-            .category-feature-row,
-            .asset-spec-value-row,
-            .asset-spec-filter-row {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
 </head>
 
-<body class="bg-gray-100 h-screen overflow-hidden">
+<body class="bg-gray-100 h-screen overflow-hidden" data-dashboard-role="admin">
     <div class="flex h-full">
-
-        <div class="w-64 bg-blue-900 h-full p-4 flex flex-col flex-shrink-0">
-            <div class="flex items-center gap-3 mb-8 p-2">
-                <div class="flex gap-1">
-                    <img src="/assets/ubi-logo-white.png" class="w-20 h-20" alt="Logotipo UBI">
-                </div>
-                <h1 class="text-4xl text-white font-semibold">InvUBI</h1>
-            </div>
-
-            <nav class="flex-1">
-                <button type="button" onclick="showView('dashboard')" id="btn-dashboard"
-                    class="w-full flex items-center gap-3 px-4 py-3 mb-2 rounded bg-white text-blue-900">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                    </svg>
-                    <span>Página Inicial</span>
-                </button>
-
-                <button type="button" onclick="showView('utilizadores')" id="btn-utilizadores"
-                    class="w-full flex items-center gap-3 px-4 py-3 mb-2 rounded text-white hover:bg-blue-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                    </svg>
-                    <span>Utilizadores</span>
-                </button>
-
-                <button type="button" onclick="showView('locais')" id="btn-locais"
-                    class="w-full flex items-center gap-3 px-4 py-3 mb-2 rounded text-white hover:bg-blue-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    <span>Locais</span>
-                </button>
-
-                <button type="button" onclick="showView('ativos')" id="btn-ativos"
-                    class="w-full flex items-center gap-3 px-4 py-3 mb-2 rounded text-white hover:bg-blue-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                    </svg>
-                    <span>Ativos</span>
-                </button>
-
-                <button type="button" onclick="showView('categorias')" id="btn-categorias"
-                    class="w-full flex items-center gap-3 px-4 py-3 mb-2 rounded text-white hover:bg-blue-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                    <span>Categorias</span>
-                </button>
-
-                <button type="button" onclick="showView('registos')" id="btn-registos"
-                    class="w-full flex items-center gap-3 px-4 py-3 mb-2 rounded text-white hover:bg-blue-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>Registos</span>
-                </button>
-            </nav>
-
-            <div class="mt-auto">
-                <button type="button" onclick="logout()"
-                    class="w-full bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors font-bold">
-                    SAIR
-                </button>
-            </div>
-        </div>
+        <div data-dashboard-sidebar></div>
 
         <div class="flex-1 flex flex-col h-full min-w-0">
-
-            <header class="bg-white shadow-sm p-4 flex justify-between items-center flex-shrink-0">
-                <h1 class="text-xl font-bold" id="pageTitle">DASHBOARD</h1>
-                <div class="flex items-center gap-4">
-                    <span class="text-sm" id="adminEmail">admin@ubi.pt</span>
-                    <div
-                        class="w-10 h-10 bg-gray-600 text-white rounded-full flex items-center justify-center font-bold" data-dashboard-avatar>
-                        AD
-                    </div>
-                </div>
-            </header>
+            <div data-dashboard-header></div>
 
             <main class="p-6 flex-1 overflow-y-auto">
 
@@ -455,13 +30,26 @@
                         </div>
                         <div class="bg-white p-6 rounded-lg shadow">
                             <h3 class="text-sm text-gray-600 mb-2">Total Ativos</h3>
-                            <p class="text-4xl font-bold text-red-600" id="count-assets">0</p>
+                            <p class="text-4xl font-bold" id="count-assets">0</p>
                         </div>
                     </div>
 
                     <div class="grid grid-cols-2 gap-6 mb-6">
                         <div class="bg-white p-6 rounded-lg shadow">
-                            <h3 class="text-lg font-bold mb-4">Registos Mensais</h3>
+                            <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <h3 class="text-lg font-bold">Registos</h3>
+                                    <p id="chartRegistosSubtitle" class="mt-1 text-xs font-semibold text-gray-500">Último ano</p>
+                                </div>
+                                <label class="flex min-w-[11rem] flex-col gap-1 text-xs font-black uppercase tracking-wide text-blue-900">
+                                    <span>Período</span>
+                                    <select id="logs-chart-period" class="min-h-9 rounded-xl border-2 border-blue-900 bg-white px-3 py-1.5 text-sm font-semibold normal-case tracking-normal text-gray-900 outline-none transition focus:ring-2 focus:ring-blue-900/20">
+                                        <option value="year" selected>Último ano</option>
+                                        <option value="month">Últimos 30 dias</option>
+                                        <option value="all">Todo o tempo</option>
+                                    </select>
+                                </label>
+                            </div>
                             <div class="relative h-64 w-full">
                                 <canvas id="chartRegistos"></canvas>
                             </div>
@@ -480,50 +68,54 @@
                             <p class="text-xs text-gray-500" id="dashUsersResultCount">0 resultados</p>
                         </div>
 
-                        <div class="flex flex-wrap items-end gap-6 mb-6">
-                            <div class="flex min-w-56 flex-col gap-1.5">
-                                <label for="dash-users-search" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Pesquisar</label>
-                                <input type="text" id="dash-users-search" placeholder="ID, email ou cargo"
-                                    class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
+                        <div class="asset-search-panel mb-5 rounded-2xl border border-blue-100 bg-slate-50/80 p-4 shadow-sm" data-search-panel="dashboardUsers">
+                            <div class="asset-search-main search-main-simple flex flex-wrap items-end gap-3">
+                                <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                    <label for="dash-users-search">Pesquisar</label>
+                                    <input type="text" id="dash-users-search" placeholder="ID, email ou cargo">
+                                </div>
+                                <button type="button" class="asset-search-button asset-search-button-secondary inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-900 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-blue-900 transition hover:bg-blue-50 aria-expanded:bg-blue-50" data-filter-drawer-toggle="dashboardUsers" aria-controls="dashboardUsersFiltersDrawer" aria-expanded="false">Filtros</button>
+                                <button type="button" onclick="limparFiltros('dashboardUsers')" class="asset-search-button asset-search-button-danger inline-flex min-h-10 items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-red-700 transition hover:border-red-600 hover:bg-red-50">Limpar</button>
                             </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="dash-users-role" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Cargo</label>
-                                <select id="dash-users-role" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="">Todos</option>
-                                </select>
-                            </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="dash-users-status" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Estado</label>
-                                <select id="dash-users-status" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="">Todos</option>
-                                </select>
-                            </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="dash-users-sort" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Ordenar</label>
-                                <select id="dash-users-sort" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="id-desc">Mais recentes</option>
-                                    <option value="email-asc">Email A-Z</option>
-                                    <option value="email-desc">Email Z-A</option>
-                                    <option value="role-asc">Cargo A-Z</option>
-                                    <option value="id-asc">ID crescente</option>
-                                </select>
-                            </div>
-                            <div class="flex items-center gap-2.5">
-                                
-                                <button type="button" onclick="limparFiltros('dashboardUsers')"
-                                    class="h-9 rounded-md px-3 text-xs font-extrabold uppercase transition bg-blue-900 text-white hover:bg-blue-800">Limpar</button>
+                            <div id="dashboardUsersActiveFiltersSummary" class="asset-active-summary flex flex-wrap gap-2 empty:hidden"></div>
+                            <div id="dashboardUsersFiltersDrawer" class="asset-filters-drawer mt-4 hidden rounded-xl border border-gray-200 bg-white p-4" data-filter-drawer="dashboardUsers">
+                                <div class="asset-filters-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="dash-users-role">Cargo</label>
+                                        <select id="dash-users-role">
+                                            <option value="">Todos</option>
+                                        </select>
+                                    </div>
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="dash-users-status">Estado</label>
+                                        <select id="dash-users-status">
+                                            <option value="">Todos</option>
+                                        </select>
+                                    </div>
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="dash-users-sort">Ordenar</label>
+                                        <select id="dash-users-sort">
+                                            <option value="id-desc">Mais recentes</option>
+                                            <option value="email-asc">Email A-Z</option>
+                                            <option value="email-desc">Email Z-A</option>
+                                            <option value="role-asc">Cargo A-Z</option>
+                                            <option value="id-asc">ID crescente</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="table-shell">
+                        <div class="table-shell relative w-full overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
 
-                        <table class="w-full">
-                            <thead class="bg-gray-200 text-blue-900">
+                        <table class="w-full min-w-max border-separate border-spacing-0 text-sm">
+                            <thead class="bg-slate-50 text-blue-900">
                                 <tr>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ID</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">EMAIL</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">TIPO</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ESTADO</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">ID</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">EMAIL</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">TIPO</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">SALAS</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">REGISTO</th>
                                 </tr>
                             </thead>
                             <tbody id="usersTableBody">
@@ -532,7 +124,7 @@
 
                         </div>
 
-                        <div id="dashboardUsersPagination" class="table-pagination" aria-label="Paginação dos utilizadores recentes"></div>
+                        <div id="dashboardUsersPagination" class="table-pagination mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4" aria-label="Paginação dos utilizadores recentes"></div>
                     </div>
                 </div>
 
@@ -544,51 +136,57 @@
                                 <p class="text-xs text-gray-500" id="usersResultCount">0 resultados</p>
                             </div>
                         </div>
-                        <div class="flex flex-wrap items-end gap-6 mb-6">
-                            <div class="flex min-w-56 flex-col gap-1.5">
-                                <label for="users-search" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Pesquisar</label>
-                                <input type="text" id="users-search" placeholder="ID, email ou cargo"
-                                    class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
+                        <div class="asset-search-panel mb-5 rounded-2xl border border-blue-100 bg-slate-50/80 p-4 shadow-sm" data-search-panel="users">
+                            <div class="asset-search-main search-main-action flex flex-wrap items-end gap-3">
+                                <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                    <label for="users-search">Pesquisar</label>
+                                    <input type="text" id="users-search" placeholder="ID, email ou cargo">
+                                </div>
+                                <button type="button" class="asset-search-button asset-search-button-secondary inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-900 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-blue-900 transition hover:bg-blue-50 aria-expanded:bg-blue-50" data-filter-drawer-toggle="users" aria-controls="usersFiltersDrawer" aria-expanded="false">Filtros</button>
+                                <button type="button" onclick="limparFiltros('users')" class="asset-search-button asset-search-button-danger inline-flex min-h-10 items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-red-700 transition hover:border-red-600 hover:bg-red-50">Limpar</button>
+                                <button id="btnNovoUtilizador" type="button" onclick="abrirModalUtilizador()" class="asset-search-button asset-search-button-primary inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-900 bg-blue-900 px-4 py-2 text-sm font-black uppercase tracking-wide text-white transition hover:bg-blue-800">+ Novo Utilizador</button>
                             </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="users-role" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Cargo</label>
-                                <select id="users-role" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="">Todos</option>
-                                </select>
-                            </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="users-status" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Estado</label>
-                                <select id="users-status" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="">Todos</option>
-                                </select>
-                            </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="users-sort" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Ordenar</label>
-                                <select id="users-sort" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="email-asc">Email A-Z</option>
-                                    <option value="email-desc">Email Z-A</option>
-                                    <option value="role-asc">Cargo A-Z</option>
-                                    <option value="role-desc">Cargo Z-A</option>
-                                    <option value="id-asc">ID crescente</option>
-                                    <option value="id-desc">ID decrescente</option>
-                                </select>
-                            </div>
-                            <div class="flex items-center gap-2.5">
-                                <button type="button" onclick="limparFiltros('users')" class="h-9 rounded-md px-3 text-xs font-extrabold uppercase transition border-2 border-blue-900 bg-white text-blue-900 hover:bg-gray-100">Limpar</button>
-                                <button id="btnNovoUtilizador" type="button" onclick="abrirModalUtilizador()" class="h-9 rounded-md px-3 text-xs font-extrabold uppercase transition bg-blue-900 text-white hover:bg-blue-800">+ Novo Utilizador</button>
+                            <div id="usersActiveFiltersSummary" class="asset-active-summary flex flex-wrap gap-2 empty:hidden"></div>
+                            <div id="usersFiltersDrawer" class="asset-filters-drawer mt-4 hidden rounded-xl border border-gray-200 bg-white p-4" data-filter-drawer="users">
+                                <div class="asset-filters-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="users-role">Cargo</label>
+                                        <select id="users-role">
+                                            <option value="">Todos</option>
+                                        </select>
+                                    </div>
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="users-status">Estado</label>
+                                        <select id="users-status">
+                                            <option value="">Todos</option>
+                                        </select>
+                                    </div>
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="users-sort">Ordenar</label>
+                                        <select id="users-sort">
+                                            <option value="email-asc">Email A-Z</option>
+                                            <option value="email-desc">Email Z-A</option>
+                                            <option value="role-asc">Cargo A-Z</option>
+                                            <option value="role-desc">Cargo Z-A</option>
+                                            <option value="id-asc">ID crescente</option>
+                                            <option value="id-desc">ID decrescente</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="table-shell">
+                        <div class="table-shell relative w-full overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
 
-                        <table class="w-full">
-                            <thead class="bg-gray-200 text-blue-900">
+                        <table class="w-full min-w-max border-separate border-spacing-0 text-sm">
+                            <thead class="bg-slate-50 text-blue-900">
                                 <tr>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ID</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">EMAIL</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">CARGO</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ESTADO</th>
-                                    <th class="px-4 py-2 text-right text-sm font-bold">AÇÕES</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">ID</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">EMAIL</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">CARGO</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">SALAS</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">REGISTO</th>
+                                    <th class="sticky right-0 z-[9] w-px whitespace-nowrap border-l border-gray-200 bg-slate-50 px-2 py-3 text-right text-xs font-black uppercase tracking-wide text-blue-900 shadow-[-10px_0_14px_-18px_rgba(15,23,42,0.75)]">AÇÕES</th>
                                 </tr>
                             </thead>
                             <tbody id="fullUsersTableBody">
@@ -597,7 +195,7 @@
 
                         </div>
 
-                        <div id="usersPagination" class="table-pagination" aria-label="Paginação dos utilizadores"></div>
+                        <div id="usersPagination" class="table-pagination mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4" aria-label="Paginação dos utilizadores"></div>
                     </div>
                 </div>
 
@@ -609,44 +207,40 @@
                                 <p class="text-xs text-gray-500" id="locationsResultCount">0 resultados</p>
                             </div>
                         </div>
-                        <div class="flex flex-wrap items-end gap-6 mb-6">
-                            <div class="flex min-w-56 flex-col gap-1.5">
-                                <label for="locations-search" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Pesquisar</label>
-                                <input type="text" id="locations-search" placeholder="ID, designação ou sala"
-                                    class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
+                        <div class="asset-search-panel mb-5 rounded-2xl border border-blue-100 bg-slate-50/80 p-4 shadow-sm" data-search-panel="locations">
+                            <div class="asset-search-main search-main-action flex flex-wrap items-end gap-3">
+                                <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                    <label for="locations-search">Pesquisar</label>
+                                    <input type="text" id="locations-search" placeholder="ID, designação ou sala">
+                                </div>
+                                <button type="button" class="asset-search-button asset-search-button-secondary inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-900 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-blue-900 transition hover:bg-blue-50 aria-expanded:bg-blue-50" data-filter-drawer-toggle="locations" aria-controls="locationsFiltersDrawer" aria-expanded="false">Filtros</button>
+                                <button type="button" onclick="limparFiltros('locations')" class="asset-search-button asset-search-button-danger inline-flex min-h-10 items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-red-700 transition hover:border-red-600 hover:bg-red-50">Limpar</button>
+                                <button id="btnNovoLocal" type="button" onclick="abrirModalLocal()" class="asset-search-button asset-search-button-primary inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-900 bg-blue-900 px-4 py-2 text-sm font-black uppercase tracking-wide text-white transition hover:bg-blue-800">+ Adicionar Local</button>
                             </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="locations-status" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Estado</label>
-                                <select id="locations-status" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="">Todos</option>
-                                </select>
-                            </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="locations-sort" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Ordenar</label>
-                                <select id="locations-sort" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="name-asc">Designação A-Z</option>
-                                    <option value="name-desc">Designação Z-A</option>
-                                    <option value="id-asc">ID crescente</option>
-                                    <option value="id-desc">ID decrescente</option>
-                                    <option value="status-asc">Estado A-Z</option>
-                                </select>
-                            </div>
-                            <div class="flex items-center gap-2.5">
-                                <button type="button" onclick="limparFiltros('locations')"
-                                    class="h-9 rounded-md px-3 text-xs font-extrabold uppercase transition border-2 border-blue-900 bg-white text-blue-900 hover:bg-gray-100">Limpar</button>
-                                <button id="btnNovoLocal" type="button" onclick="abrirModalLocal()" class="h-9 rounded-md px-3 text-xs font-extrabold uppercase transition bg-blue-900 text-white hover:bg-blue-800">+ Adicionar Local</button>
+                            <div id="locationsActiveFiltersSummary" class="asset-active-summary flex flex-wrap gap-2 empty:hidden"></div>
+                            <div id="locationsFiltersDrawer" class="asset-filters-drawer mt-4 hidden rounded-xl border border-gray-200 bg-white p-4" data-filter-drawer="locations">
+                                <div class="asset-filters-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="locations-sort">Ordenar</label>
+                                        <select id="locations-sort">
+                                            <option value="name-asc">Designação A-Z</option>
+                                            <option value="name-desc">Designação Z-A</option>
+                                            <option value="id-asc">ID crescente</option>
+                                            <option value="id-desc">ID decrescente</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="table-shell">
+                        <div class="table-shell relative w-full overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
 
-                        <table class="w-full">
-                            <thead class="bg-gray-200 text-blue-900">
+                        <table class="w-full min-w-max border-separate border-spacing-0 text-sm">
+                            <thead class="bg-slate-50 text-blue-900">
                                 <tr>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ID LOCAL</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">DESIGNAÇÃO / SALA</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ESTADO</th>
-                                    <th class="px-4 py-2 text-right text-sm font-bold">AÇÕES</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">ID LOCAL</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">DESIGNAÇÃO / SALA</th>
+                                    <th class="sticky right-0 z-[9] w-px whitespace-nowrap border-l border-gray-200 bg-slate-50 px-2 py-3 text-right text-xs font-black uppercase tracking-wide text-blue-900 shadow-[-10px_0_14px_-18px_rgba(15,23,42,0.75)]">AÇÕES</th>
                                 </tr>
                             </thead>
                             <tbody id="locationsTableBody">
@@ -655,92 +249,102 @@
 
                         </div>
 
-                        <div id="locationsPagination" class="table-pagination" aria-label="Paginação dos locais"></div>
+                        <div id="locationsPagination" class="table-pagination mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4" aria-label="Paginação dos locais"></div>
                     </div>
                 </div>
 
                 <div id="view-ativos" class="hidden">
                     <div class="bg-white p-6 rounded-lg shadow mb-6">
-                        <div class="flex justify-between items-center mb-4">
+                        <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
                             <div>
                                 <h3 class="text-lg font-bold">Inventário de Ativos</h3>
                                 <p class="text-xs text-gray-500" id="assetsResultCount">0 resultados</p>
                             </div>
+                            <button id="btnNovoAtivo" type="button" class="asset-search-button asset-search-button-primary inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-900 bg-blue-900 px-4 py-2 text-sm font-black uppercase tracking-wide text-white transition hover:bg-blue-800">+ Novo Ativo</button>
                         </div>
-                        <div class="flex flex-wrap items-end gap-6 mb-6">
-                            <div class="flex min-w-56 flex-col gap-1.5">
-                                <label for="assets-search" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Pesquisar</label>
-                                <input type="text" id="assets-search" placeholder="Código, ID, categoria, sala ou estado"
-                                    class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
+                        <div class="asset-search-panel mb-5 rounded-2xl border border-blue-100 bg-slate-50/80 p-4 shadow-sm">
+                            <div class="asset-search-main flex flex-wrap items-end gap-3">
+                                <div class="asset-search-control flex w-full flex-col gap-1 md:w-80 md:flex-none">
+                                    <label for="assets-search">Pesquisar</label>
+                                    <input type="text" id="assets-search" placeholder="ID, código, sala ou responsável">
+                                </div>
+                                <div class="asset-search-control flex w-full flex-col gap-1 md:w-64 md:flex-none">
+                                    <label for="assets-category">Categoria</label>
+                                    <select id="assets-category">
+                                        <option value="">Todas</option>
+                                    </select>
+                                </div>
+                                <button type="button" class="asset-search-button asset-search-button-secondary inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-900 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-blue-900 transition hover:bg-blue-50 aria-expanded:bg-blue-50" data-assets-filters-toggle aria-expanded="false">Filtros</button>
+                                <button type="button" onclick="limparFiltros('assets')" class="asset-search-button asset-search-button-danger inline-flex min-h-10 items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-red-700 transition hover:border-red-600 hover:bg-red-50">Limpar</button>
                             </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="assets-location" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Sala / Local</label>
-                                <select id="assets-location" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="">Todas</option>
-                                </select>
-                            </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="assets-category" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Categoria</label>
-                                <select id="assets-category" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="">Todas</option>
-                                </select>
-                            </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="assets-status" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Estado</label>
-                                <select id="assets-status" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="">Todos</option>
-                                </select>
-                            </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="assets-assignment" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Atribuição</label>
-                                <select id="assets-assignment" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="">Todos</option>
-                                    <option value="assigned">Com atribuição</option>
-                                    <option value="unassigned">Sem atribuição</option>
-                                </select>
-                            </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="assets-sort" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Ordenar</label>
-                                <select id="assets-sort" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="category-asc">Categoria A-Z</option>
-                                    <option value="category-desc">Categoria Z-A</option>
-                                    <option value="location-asc">Local A-Z</option>
-                                    <option value="location-desc">Local Z-A</option>
-                                    <option value="status-asc">Estado A-Z</option>
-                                    <option value="date-desc">Mais recentes</option>
-                                    <option value="date-asc">Mais antigos</option>
-                                    <option value="id-asc">ID crescente</option>
-                                    <option value="id-desc">ID decrescente</option>
-                                </select>
-                            </div>
-                            <div class="flex items-center gap-2.5">
-                                <button type="button" onclick="limparFiltros('assets')" class="h-9 rounded-md px-3 text-xs font-extrabold uppercase transition border-2 border-blue-900 bg-white text-blue-900 hover:bg-gray-100">Limpar</button>
-                                <button id="btnNovoAtivo" type="button" onclick="abrirModalAtivo()" class="h-9 rounded-md px-3 text-xs font-extrabold uppercase transition bg-blue-900 text-white hover:bg-blue-800">+ Novo Ativo</button>
-                                <button id="btnAdicionarFiltroSpecAtivo" type="button" class="h-9 rounded-md border-2 border-blue-900 bg-white px-3 text-xs font-extrabold uppercase text-blue-900 transition hover:bg-gray-100">+ Filtro por característica</button>
 
+                            <div id="assetsActiveFiltersSummary" class="asset-active-summary flex flex-wrap gap-2 empty:hidden"></div>
+                            <div id="assetsColumnPicker" class="asset-column-picker mt-4 hidden rounded-xl border border-blue-100 bg-white p-4" aria-live="polite"></div>
+
+                            <div id="assetsFiltersDrawer" class="asset-filters-drawer mt-4 hidden rounded-xl border border-gray-200 bg-white p-4">
+                                <div class="asset-filters-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="assets-location">Sala / Local</label>
+                                        <select id="assets-location">
+                                            <option value="">Todas</option>
+                                        </select>
+                                    </div>
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="assets-status">Estado</label>
+                                        <select id="assets-status">
+                                            <option value="">Todos</option>
+                                        </select>
+                                    </div>
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="assets-assignment">Atribuição</label>
+                                        <select id="assets-assignment">
+                                            <option value="">Todos</option>
+                                            <option value="assigned">Com atribuição</option>
+                                            <option value="unassigned">Sem atribuição</option>
+                                        </select>
+                                    </div>
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="assets-sort">Ordenar</label>
+                                        <select id="assets-sort">
+                                            <option value="date-desc">Mais recentes</option>
+                                            <option value="date-asc">Mais antigos</option>
+                                            <option value="category-asc">Categoria A-Z</option>
+                                            <option value="category-desc">Categoria Z-A</option>
+                                            <option value="location-asc">Local A-Z</option>
+                                            <option value="location-desc">Local Z-A</option>
+                                            <option value="status-asc">Estado A-Z</option>
+                                            <option value="id-asc">ID crescente</option>
+                                            <option value="id-desc">ID decrescente</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <section class="asset-feature-filter-card mt-4 rounded-2xl border border-blue-100 bg-blue-50/40 p-3">
+                                    <div class="flex flex-wrap items-center justify-between gap-3">
+                                        <div class="min-w-0">
+                                            <p class="text-xs font-black uppercase tracking-wide text-blue-900">Características</p>
+                                            <p id="assetSpecFilterHelper" class="mt-0.5 text-xs font-semibold text-gray-500">Seleciona uma categoria para ativar filtros por características.</p>
+                                        </div>
+                                        <button id="btnAdicionarFiltroSpecAtivo" type="button" class="asset-search-button asset-search-button-secondary inline-flex min-h-9 items-center justify-center rounded-xl border border-blue-900 bg-white px-3 py-2 text-xs font-black uppercase tracking-wide text-blue-900 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400">
+                                            + Adicionar filtro
+                                        </button>
+                                    </div>
+
+                                    <div id="assetsCategoryFeaturesPanel" class="asset-category-feature-summary mt-3 flex flex-wrap gap-1.5 empty:hidden"></div>
+
+                                    <div class="asset-advanced-filters mt-3 hidden rounded-2xl border border-blue-100 bg-white p-3">
+                                        <div id="assetSpecFiltersRows" class="space-y-2">
+                                            <p class="asset-spec-filter-empty">Sem filtros avançados ativos.</p>
+                                        </div>
+                                    </div>
+                                </section>
                             </div>
                         </div>
 
-                        <div class="asset-advanced-filters">
-                            <div class="asset-advanced-filters-header"></div>
-                            <div id="assetSpecFiltersRows" class="space-y-3">
-                                <p class="asset-spec-filter-empty">Sem filtros avançados ativos.</p>
-                            </div>
-                        </div>
+                        <div class="table-shell relative w-full overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
 
-                        <div class="table-shell">
-
-                        <table class="w-full">
-                            <thead class="bg-gray-200 text-blue-900">
-                                <tr>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">CÓDIGO</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">CATEGORIA</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">SALA</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ESTADO</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ATRIBUÍDO A</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">DATA DE REGISTO</th>
-                                    <th class="px-4 py-2 text-right text-sm font-bold">AÇÕES</th>
-                                </tr>
+                        <table class="w-full min-w-max text-sm">
+                            <thead id="assetsTableHead" class="bg-gray-200 text-blue-900">
                             </thead>
                             <tbody id="assetsTableBody">
                             </tbody>
@@ -748,7 +352,7 @@
 
                         </div>
 
-                        <div id="assetsPagination" class="table-pagination" aria-label="Paginação dos ativos"></div>
+                        <div id="assetsPagination" class="table-pagination mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4" aria-label="Paginação dos ativos"></div>
                     </div>
                 </div>
 
@@ -760,39 +364,43 @@
                                 <p class="text-xs text-gray-500" id="categoriesResultCount">0 resultados</p>
                             </div>
                         </div>
-                        <div class="flex flex-wrap items-end gap-6 mb-6">
-                            <div class="flex min-w-56 flex-col gap-1.5">
-                                <label for="categories-search" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Pesquisar</label>
-                                <input type="text" id="categories-search" placeholder="ID, nome ou feature"
-                                    class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
+                        <div class="asset-search-panel mb-5 rounded-2xl border border-blue-100 bg-slate-50/80 p-4 shadow-sm" data-search-panel="categories">
+                            <div class="asset-search-main search-main-action flex flex-wrap items-end gap-3">
+                                <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                    <label for="categories-search">Pesquisar</label>
+                                    <input type="text" id="categories-search" placeholder="ID, nome ou feature">
+                                </div>
+                                <button type="button" class="asset-search-button asset-search-button-secondary inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-900 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-blue-900 transition hover:bg-blue-50 aria-expanded:bg-blue-50" data-filter-drawer-toggle="categories" aria-controls="categoriesFiltersDrawer" aria-expanded="false">Filtros</button>
+                                <button type="button" onclick="limparFiltros('categories')" class="asset-search-button asset-search-button-danger inline-flex min-h-10 items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-red-700 transition hover:border-red-600 hover:bg-red-50">Limpar</button>
+                                <button id="btnNovaCategoria" type="button" onclick="abrirModalCategoria()" class="asset-search-button asset-search-button-primary inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-900 bg-blue-900 px-4 py-2 text-sm font-black uppercase tracking-wide text-white transition hover:bg-blue-800">+ Nova Categoria</button>
                             </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="categories-sort" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Ordenar</label>
-                                <select id="categories-sort" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="name-asc">Categoria A-Z</option>
-                                    <option value="name-desc">Categoria Z-A</option>
-                                    <option value="id-asc">ID crescente</option>
-                                    <option value="id-desc">ID decrescente</option>
-                                    <option value="features-asc">Menos features</option>
-                                    <option value="features-desc">Mais features</option>
-                                </select>
-                            </div>
-                            <div class="flex items-center gap-2.5">
-                                <button type="button" onclick="limparFiltros('categories')"
-                                    class="h-9 rounded-md px-3 text-xs font-extrabold uppercase transition border-2 border-blue-900 bg-white text-blue-900 hover:bg-gray-100">Limpar</button>
-                                <button id="btnNovaCategoria" type="button" onclick="abrirModalCategoria()" class="h-9 rounded-md px-3 text-xs font-extrabold uppercase transition bg-blue-900 text-white hover:bg-blue-800">+ Nova Categoria</button>
+                            <div id="categoriesActiveFiltersSummary" class="asset-active-summary flex flex-wrap gap-2 empty:hidden"></div>
+                            <div id="categoriesFiltersDrawer" class="asset-filters-drawer mt-4 hidden rounded-xl border border-gray-200 bg-white p-4" data-filter-drawer="categories">
+                                <div class="asset-filters-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="categories-sort">Ordenar</label>
+                                        <select id="categories-sort">
+                                            <option value="name-asc">Categoria A-Z</option>
+                                            <option value="name-desc">Categoria Z-A</option>
+                                            <option value="id-asc">ID crescente</option>
+                                            <option value="id-desc">ID decrescente</option>
+                                            <option value="features-asc">Menos features</option>
+                                            <option value="features-desc">Mais features</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="table-shell">
+                        <div class="table-shell relative w-full overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
 
-                        <table class="w-full">
-                            <thead class="bg-gray-200 text-blue-900">
+                        <table class="w-full min-w-max border-separate border-spacing-0 text-sm">
+                            <thead class="bg-slate-50 text-blue-900">
                                 <tr>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ID</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">NOME DA CATEGORIA</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">FEATURES</th>
-                                    <th class="px-4 py-2 text-right text-sm font-bold">AÇÕES</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">ID</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">NOME DA CATEGORIA</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">FEATURES</th>
+                                    <th class="sticky right-0 z-[9] w-px whitespace-nowrap border-l border-gray-200 bg-slate-50 px-2 py-3 text-right text-xs font-black uppercase tracking-wide text-blue-900 shadow-[-10px_0_14px_-18px_rgba(15,23,42,0.75)]">AÇÕES</th>
                                 </tr>
                             </thead>
                             <tbody id="categoriesTableBody">
@@ -801,7 +409,7 @@
 
                         </div>
 
-                        <div id="categoriesPagination" class="table-pagination" aria-label="Paginação das categorias"></div>
+                        <div id="categoriesPagination" class="table-pagination mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4" aria-label="Paginação das categorias"></div>
                     </div>
                 </div>
 
@@ -811,47 +419,59 @@
                             <h3 class="text-lg font-bold">Registos de Auditoria (Logs)</h3>
                             <p class="text-xs text-gray-500" id="logsResultCount">0 resultados</p>
                         </div>
-                        <div class="flex flex-wrap items-end gap-6 mb-6">
-                            <div class="flex min-w-56 flex-col gap-1.5">
-                                <label for="logs-search" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Pesquisar</label>
-                                <input type="text" id="logs-search" placeholder="Data, utilizador, ação ou detalhes"
-                                    class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
+                        <div class="asset-search-panel mb-5 rounded-2xl border border-blue-100 bg-slate-50/80 p-4 shadow-sm" data-search-panel="logs">
+                            <div class="asset-search-main search-main-simple flex flex-wrap items-end gap-3">
+                                <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                    <label for="logs-search">Pesquisar</label>
+                                    <input type="text" id="logs-search" placeholder="Data, utilizador, ação ou detalhes">
+                                </div>
+                                <button type="button" class="asset-search-button asset-search-button-secondary inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-900 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-blue-900 transition hover:bg-blue-50 aria-expanded:bg-blue-50" data-filter-drawer-toggle="logs" aria-controls="logsFiltersDrawer" aria-expanded="false">Filtros</button>
+                                <button type="button" onclick="limparFiltros('logs')" class="asset-search-button asset-search-button-danger inline-flex min-h-10 items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-red-700 transition hover:border-red-600 hover:bg-red-50">Limpar</button>
                             </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="logs-user" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Utilizador</label>
-                                <select id="logs-user" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="">Todos</option>
-                                </select>
-                            </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="logs-action" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Ação</label>
-                                <select id="logs-action" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="">Todas</option>
-                                </select>
-                            </div>
-                            <div class="flex min-w-32 flex-col gap-1.5">
-                                <label for="logs-sort" class="text-xs leading-4 font-extrabold text-blue-900 uppercase">Ordenar</label>
-                                <select id="logs-sort" class="h-9 border-2 border-blue-900 rounded-lg bg-white px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
-                                    <option value="date-desc">Mais recentes</option>
-                                    <option value="date-asc">Mais antigos</option>
-                                    <option value="user-asc">Utilizador A-Z</option>
-                                    <option value="action-asc">Ação A-Z</option>
-                                </select>
-                            </div>
-                            <div class="flex items-center gap-2.5">
-                                <button type="button" onclick="limparFiltros('logs')" class="h-9 rounded-md px-3 text-xs font-extrabold uppercase transition bg-blue-900 text-white hover:bg-blue-800">Limpar</button>
+                            <div id="logsActiveFiltersSummary" class="asset-active-summary flex flex-wrap gap-2 empty:hidden"></div>
+                            <div id="logsFiltersDrawer" class="asset-filters-drawer mt-4 hidden rounded-xl border border-gray-200 bg-white p-4" data-filter-drawer="logs">
+                                <div class="asset-filters-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="logs-user">Utilizador</label>
+                                        <select id="logs-user">
+                                            <option value="">Todos</option>
+                                        </select>
+                                    </div>
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="logs-action">Ação</label>
+                                        <select id="logs-action">
+                                            <option value="">Todas</option>
+                                        </select>
+                                    </div>
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="logs-table">Área</label>
+                                        <select id="logs-table">
+                                            <option value="">Todas</option>
+                                        </select>
+                                    </div>
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="logs-sort">Ordenar</label>
+                                        <select id="logs-sort">
+                                            <option value="date-desc">Mais recentes</option>
+                                            <option value="date-asc">Mais antigos</option>
+                                            <option value="user-asc">Utilizador A-Z</option>
+                                            <option value="action-asc">Ação A-Z</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="table-shell">
+                        <div class="table-shell relative w-full overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
 
-                        <table class="w-full">
-                            <thead class="bg-gray-200 text-blue-900">
+                        <table class="w-full min-w-max border-separate border-spacing-0 text-sm">
+                            <thead class="bg-slate-50 text-blue-900">
                                 <tr>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">DATA/HORA</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">UTILIZADOR</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">AÇÃO</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">DETALHES</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">DATA/HORA</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">UTILIZADOR</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">AÇÃO</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">ÁREA</th>
+                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">DETALHES</th>
                                 </tr>
                             </thead>
                             <tbody id="logsTableBody">
@@ -860,20 +480,22 @@
 
                         </div>
 
-                        <div id="logsPagination" class="table-pagination" aria-label="Paginação dos registos"></div>
+                        <div id="logsPagination" class="table-pagination mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4" aria-label="Paginação dos registos"></div>
                     </div>
                 </div>
 
             </main>
+
+            <div data-dashboard-footer></div>
         </div>
     </div>
 
 
     <div id="toastMessage" class="fixed right-6 top-6 z-50 hidden max-w-sm rounded-xl px-4 py-3 text-sm font-semibold shadow-lg"></div>
 
-    <div id="modalUtilizador" class="admin-modal fixed inset-0 z-40 hidden items-center justify-center bg-black/40 p-4">
-        <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
-            <div class="modal-header mb-5 flex items-center justify-between">
+    <div id="modalUtilizador" data-dashboard-modal class="dashboard-modal fixed inset-0 z-[1000] hidden items-center justify-center overflow-y-auto bg-black/40 p-4">
+        <div class="flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white p-6 shadow-2xl">
+            <div class="mb-5 flex flex-shrink-0 items-center justify-between">
                 <h2 id="modalUtilizadorTitulo" class="text-xl font-black text-blue-900">Novo Utilizador</h2>
                 <button type="button" onclick="fecharModal('modalUtilizador')" class="text-2xl font-bold text-gray-500 hover:text-gray-900">×</button>
             </div>
@@ -890,13 +512,20 @@
                         <option value="Administrador">Administrador</option>
                     </select>
                 </div>
-                <div>
-                    <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">Sala / Local</label>
-                    <select id="new-user-location" class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20">
-                        <option value="">Sem sala associada</option>
-                    </select>
+                <div class="rounded-2xl border border-blue-100 bg-blue-50/40 p-3">
+                    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <label class="block text-xs font-extrabold uppercase tracking-wide text-blue-900">Salas / Locais</label>
+                            <p class="mt-0.5 text-xs font-semibold text-gray-500">Associa uma ou mais salas a este utilizador.</p>
+                        </div>
+                        <button id="btnAdicionarSalaUtilizador" type="button" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-blue-900 bg-white px-3 py-1.5 text-xs font-black uppercase tracking-wide text-blue-900 transition hover:bg-blue-50">
+                            + Adicionar
+                        </button>
+                    </div>
+                    <div id="userLocationRows" class="space-y-2"></div>
+                    <div id="userLocationSummary" class="mt-3 flex flex-wrap gap-2 empty:hidden"></div>
                 </div>
-                <div class="admin-modal-actions flex justify-end gap-3 pt-2">
+                <div class="sticky bottom-0 flex flex-wrap justify-end gap-3 bg-white pt-3">
                     <button type="button" onclick="fecharModal('modalUtilizador')" class="rounded-lg border-2 border-blue-900 px-4 py-2 text-sm font-bold text-blue-900 hover:bg-gray-100">Cancelar</button>
                     <button id="modalUtilizadorSubmit" type="submit" class="rounded-lg bg-blue-900 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">Guardar</button>
                 </div>
@@ -904,9 +533,9 @@
         </div>
     </div>
 
-    <div id="modalLocal" class="admin-modal fixed inset-0 z-40 hidden items-center justify-center bg-black/40 p-4">
-        <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
-            <div class="modal-header mb-5 flex items-center justify-between">
+    <div id="modalLocal" data-dashboard-modal class="dashboard-modal fixed inset-0 z-[1000] hidden items-center justify-center overflow-y-auto bg-black/40 p-4">
+        <div class="flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white p-6 shadow-2xl">
+            <div class="mb-5 flex flex-shrink-0 items-center justify-between">
                 <h2 id="modalLocalTitulo" class="text-xl font-black text-blue-900">Adicionar Local</h2>
                 <button type="button" onclick="fecharModal('modalLocal')" class="text-2xl font-bold text-gray-500 hover:text-gray-900">×</button>
             </div>
@@ -923,7 +552,7 @@
                         <option value="">Sem gestor associado</option>
                     </select>
                 </div>
-                <div class="admin-modal-actions flex justify-end gap-3 pt-2">
+                <div class="sticky bottom-0 flex flex-wrap justify-end gap-3 bg-white pt-3">
                     <button type="button" onclick="fecharModal('modalLocal')" class="rounded-lg border-2 border-blue-900 px-4 py-2 text-sm font-bold text-blue-900 hover:bg-gray-100">Cancelar</button>
                     <button id="modalLocalSubmit" type="submit" class="rounded-lg bg-blue-900 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">Guardar</button>
                 </div>
@@ -931,9 +560,9 @@
         </div>
     </div>
 
-    <div id="modalAtivo" class="admin-modal fixed inset-0 z-40 hidden items-center justify-center bg-black/40 p-4">
-        <div class="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
-            <div class="modal-header mb-5 flex items-center justify-between">
+    <div id="modalAtivo" data-dashboard-modal class="dashboard-modal fixed inset-0 z-[1000] hidden items-center justify-center overflow-y-auto bg-black/40 p-4">
+        <div class="flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white p-6 shadow-2xl">
+            <div class="mb-5 flex flex-shrink-0 items-center justify-between">
                 <h2 id="modalAtivoTitulo" class="text-xl font-black text-blue-900">Novo Ativo</h2>
                 <button type="button" onclick="fecharModal('modalAtivo')" class="text-2xl font-bold text-gray-500 hover:text-gray-900">×</button>
             </div>
@@ -942,6 +571,7 @@
                 <div>
                     <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">Código interno / património</label>
                     <input id="new-asset-serial" type="text" required class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="INV-0001">
+                    <p id="assetSerialHelp" class="mt-1 hidden text-[11px] font-semibold text-gray-500">O código interno não pode ser alterado depois do registo.</p>
                 </div>
                 <div>
                     <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">Categoria</label>
@@ -965,6 +595,11 @@
                     <input id="new-asset-assigned" type="text" class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="Opcional">
                 </div>
                 <div>
+                    <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">Última manutenção</label>
+                    <input id="new-asset-last-maintenance" type="date" class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="Opcional">
+                    <p class="mt-1 text-[11px] font-semibold text-gray-500">Se ficar em branco, será usada a data do registo.</p>
+                </div>
+                <div>
                     <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">Período manutenção (meses)</label>
                     <input id="new-asset-maintenance" type="number" min="1" class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="Opcional">
                 </div>
@@ -979,7 +614,7 @@
                         <p class="md:col-span-2 text-sm text-gray-500">Ainda não selecionaste nenhuma categoria.</p>
                     </div>
                 </div>
-                <div class="admin-modal-actions md:col-span-2 flex justify-end gap-3 pt-2">
+                <div class="sticky bottom-0 flex flex-wrap justify-end gap-3 bg-white pt-3 md:col-span-2">
                     <button type="button" onclick="fecharModal('modalAtivo')" class="rounded-lg border-2 border-blue-900 px-4 py-2 text-sm font-bold text-blue-900 hover:bg-gray-100">Cancelar</button>
                     <button id="modalAtivoSubmit" type="submit" class="rounded-lg bg-blue-900 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">Guardar</button>
                 </div>
@@ -987,9 +622,9 @@
         </div>
     </div>
 
-    <div id="modalDetalheAtivo" class="admin-modal fixed inset-0 z-40 hidden items-center justify-center bg-black/40 p-4">
-        <div class="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl">
-            <div class="modal-header mb-5 flex items-center justify-between gap-3">
+    <div id="modalDetalheAtivo" data-dashboard-modal class="dashboard-modal fixed inset-0 z-[1000] hidden items-center justify-center overflow-y-auto bg-black/40 p-4">
+        <div class="flex max-h-[90dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white p-6 shadow-2xl">
+            <div class="mb-5 flex flex-shrink-0 items-center justify-between gap-3">
                 <div>
                     <h2 class="text-xl font-black text-blue-900">Detalhe do Ativo</h2>
                     <p class="text-xs text-gray-500">Consulta rápida de dados, localização, estado e características.</p>
@@ -997,20 +632,36 @@
                 <button type="button" onclick="fecharModal('modalDetalheAtivo')" class="text-2xl font-bold text-gray-500 hover:text-gray-900">×</button>
             </div>
             <div id="assetDetailContent" class="space-y-5 overflow-y-auto pr-1"></div>
-            <div class="admin-modal-actions mt-4 flex justify-end gap-3 pt-2">
+            <div class="sticky bottom-0 mt-4 flex flex-wrap justify-end gap-3 bg-white pt-3">
                 <button id="assetDetailEditButton" type="button" class="rounded-lg border-2 border-blue-900 px-4 py-2 text-sm font-bold text-blue-900 hover:bg-gray-100">Editar</button>
                 <button type="button" onclick="fecharModal('modalDetalheAtivo')" class="rounded-lg bg-blue-900 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">Fechar</button>
             </div>
         </div>
     </div>
 
-    <div id="modalCategoria" class="admin-modal fixed inset-0 z-40 hidden items-center justify-center bg-black/40 p-4">
-        <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
-            <div class="modal-header mb-5 flex items-center justify-between">
+    <div id="modalDetalheRegisto" data-dashboard-modal class="dashboard-modal fixed inset-0 z-[1000] hidden items-center justify-center overflow-y-auto bg-black/40 p-4">
+        <div class="flex max-h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white p-6 shadow-2xl">
+            <div class="mb-5 flex flex-shrink-0 items-center justify-between gap-3">
+                <div>
+                    <h2 class="text-xl font-black text-blue-900">Detalhe do Registo</h2>
+                    <p class="text-xs text-gray-500">Consulta das alterações em formato legível, sem depender de JSON técnico.</p>
+                </div>
+                <button type="button" onclick="fecharModal('modalDetalheRegisto')" class="text-2xl font-bold text-gray-500 hover:text-gray-900">×</button>
+            </div>
+            <div id="logDetailContent" class="space-y-5 overflow-y-auto pr-1"></div>
+            <div class="sticky bottom-0 mt-4 flex flex-wrap justify-end gap-3 bg-white pt-3">
+                <button type="button" onclick="fecharModal('modalDetalheRegisto')" class="rounded-lg bg-blue-900 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalCategoria" data-dashboard-modal class="dashboard-modal fixed inset-0 z-[1000] hidden items-center justify-center overflow-y-auto bg-black/40 p-4">
+        <div class="flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white p-6 shadow-2xl">
+            <div class="mb-5 flex flex-shrink-0 items-center justify-between">
                 <h2 id="modalCategoriaTitulo" class="text-xl font-black text-blue-900">Nova Categoria</h2>
                 <button type="button" onclick="fecharModal('modalCategoria')" class="text-2xl font-bold text-gray-500 hover:text-gray-900">×</button>
             </div>
-            <form id="formCategoria" class="space-y-4">
+            <form id="formCategoria" class="min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
                 <input id="editing-category-id" type="hidden" value="">
                 <div>
                     <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">Nome da Categoria</label>
@@ -1020,13 +671,14 @@
                     <div class="category-features-header">
                         <div class="category-features-header-title">
                             <h3 class="text-sm font-black uppercase text-blue-900">Características</h3>
-                            <p class="text-xs text-gray-500">Ex.: RAM, Processador, Polegadas, Resolução. Marca “Múltipla” quando o ativo puder ter vários valores nessa feature.</p>
+                            <p class="text-xs text-gray-500">Define os campos desta categoria. Ex.: RAM, Processador ou Resolução.</p>
                         </div>
                         <button type="button" onclick="adicionarLinhaFeatureCategoria()" class="category-add-feature-button">+ Feature</button>
                     </div>
                     <div id="categoryFeaturesRows" class="space-y-3"></div>
+                        <p class="mt-3 text-xs font-semibold text-gray-500">Marca “Múltipla” só quando o ativo puder ter vários valores nessa característica.</p>
                 </div>
-                <div class="admin-modal-actions flex justify-end gap-3 pt-2">
+                <div class="sticky bottom-0 flex flex-wrap justify-end gap-3 bg-white pt-3">
                     <button type="button" onclick="fecharModal('modalCategoria')" class="rounded-lg border-2 border-blue-900 px-4 py-2 text-sm font-bold text-blue-900 hover:bg-gray-100">Cancelar</button>
                     <button id="modalCategoriaSubmit" type="submit" class="rounded-lg bg-blue-900 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">Guardar</button>
                 </div>
@@ -1036,6 +688,7 @@
 
     <script src="/js/api.js"></script>
     <script src="/js/auth.js"></script>
+    <script src="/js/layout-fragments.js"></script>
     <script src="/js/dashboard.js"></script>
     <script src="/js/admin-dashboard.js"></script>
     <script>

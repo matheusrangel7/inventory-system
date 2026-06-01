@@ -12,7 +12,7 @@ def send_registration_email(to_email: str, token: str) -> bool:
     link = f"{base_url}/primeiro-acesso?token={token}"
 
     msg = Message(
-        subject="Conclusão do Registo — Sistema de Inventário",
+        subject="Conclusão do Registo — InvUBI (Sistema de inventário)",
         recipients=[to_email],
         # Corpo em texto simples (para clientes sem suporte HTML)
         body=(

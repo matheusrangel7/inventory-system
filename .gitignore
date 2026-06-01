@@ -229,3 +229,4 @@ tailwindcss
 input.css
 
 nginx/certs/
+pop_db.py
