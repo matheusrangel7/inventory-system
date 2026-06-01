@@ -119,3 +119,6 @@ def _revoke_all_sessions(user_id: int) -> None:
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+def revoke_all_sessions(user_id: int) -> None:
+    _revoke_all_sessions(user_id)

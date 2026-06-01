@@ -94,3 +94,60 @@ def send_maintenance_alert_email(
             f"Erro ao enviar alerta de manutenção para {to_email}: {ex}"
         )
         return False
+
+
+def send_admin_transfer_email(to_email: str) -> bool:
+    subject = "[InvUBI] Foi promovido a Administrador"
+
+    body_text = (
+        "A sua conta no InvUBI foi promovida a Administrador.\n\n"
+        "Já tem acesso completo ao sistema de inventário.\n"
+        "Por favor faça login para continuar.\n\n"
+        "Se não esperava este email, contacte o suporte."
+    )
+
+    body_html = (
+        "<p>A sua conta no <strong>InvUBI</strong> foi promovida a "
+        "<strong>Administrador</strong>.</p>"
+        "<p>Já tem acesso completo ao sistema de inventário.<br>"
+        "Por favor faça login para continuar.</p>"
+        "<p style='color:#6b7280;font-size:0.875rem;'>"
+        "Se não esperava este email, contacte o suporte.</p>"
+    )
+
+    msg = Message(
+        subject=subject,
+        recipients=[to_email],
+        body=body_text,
+        html=body_html,
+    )
+
+    try:
+        mail.send(msg)
+        return True
+    except Exception as exc:
+        current_app.logger.error(f"Erro ao enviar email de transferência: {exc}")
+        return False
+
+
+def send_admin_demoted_email(to_email: str) -> bool:
+    msg = Message(
+        subject="[InvUBI] Alteração de perfil",
+        recipients=[to_email],
+        body=(
+            "A sua conta no InvUBI passou de Administrador para Gestor.\n\n"
+            "Por segurança, será necessário iniciar sessão novamente."
+        ),
+        html=(
+            "<p>A sua conta no <strong>InvUBI</strong> passou de "
+            "<strong>Administrador</strong> para <strong>Gestor</strong>.</p>"
+            "<p>Por segurança, será necessário iniciar sessão novamente.</p>"
+        ),
+    )
+
+    try:
+        mail.send(msg)
+        return True
+    except Exception as exc:
+        current_app.logger.error(f"Erro ao enviar email de rebaixamento: {exc}")
+        return False

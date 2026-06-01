@@ -1,26 +1,50 @@
 from functools import wraps
-from flask import jsonify
-from flask_jwt_extended import (
-    verify_jwt_in_request,
-    get_jwt,
-    get_jwt_identity,
-)
+
+from flask import g, jsonify
+from flask_jwt_extended import get_jwt, get_jwt_identity, verify_jwt_in_request
+
+from app.extensions import db
+from app.models.user import User
+
+
+def _get_identity_user_id() -> int | None:
+    try:
+        return int(get_jwt_identity())
+    except (TypeError, ValueError):
+        return None
+
+
+def _load_current_user():
+    verify_jwt_in_request()
+
+    claims = get_jwt()
+    if claims.get("mfa_pending") or claims.get("mfa_enrollment"):
+        return None, jsonify({"success": False, "error": "Sessão incompleta."}), 403
+
+    user_id = _get_identity_user_id()
+    if user_id is None:
+        return None, jsonify({"success": False, "error": "Utilizador inválido."}), 401
+
+    user = db.session.get(User, user_id)
+
+    if not user or not user.is_active:
+        return None, jsonify({"success": False, "error": "Utilizador inválido."}), 401
+
+    if user.registration_status != "Concluído":
+        return None, jsonify({"success": False, "error": "Registo incompleto."}), 403
+
+    g.current_user = user
+    return user, None, None
 
 
 def admin_required(fn):
-
     @wraps(fn)
     def wrapper(*args, **kwargs):
+        user, response, status = _load_current_user()
+        if response:
+            return response, status
 
-        verify_jwt_in_request()
-        
-        blocked = _ensure_full_session()
-        if blocked:
-            return blocked
-        
-        claims = get_jwt()
-
-        if claims.get("role") != "Administrador":
+        if user.role != "Administrador":
             return (
                 jsonify(
                     {"success": False, "error": "Acesso restrito a administradores."}
@@ -34,19 +58,13 @@ def admin_required(fn):
 
 
 def manager_required(fn):
-
     @wraps(fn)
     def wrapper(*args, **kwargs):
+        user, response, status = _load_current_user()
+        if response:
+            return response, status
 
-        verify_jwt_in_request()
-
-        blocked = _ensure_full_session()
-        if blocked:
-            return blocked
-        
-        claims = get_jwt()
-
-        if claims.get("role") not in ("Gestor", "Administrador"):
+        if user.role not in ("Gestor", "Administrador"):
             return jsonify({"success": False, "error": "Acesso não autorizado."}), 403
 
         return fn(*args, **kwargs)
@@ -55,17 +73,21 @@ def manager_required(fn):
 
 
 def get_current_user_id() -> int:
-    return int(get_jwt_identity())
+    if hasattr(g, "current_user"):
+        return g.current_user.user_id
+    user_id = _get_identity_user_id()
+    if user_id is None:
+        raise ValueError("JWT identity inválida.")
+    return user_id
+
 
 def get_current_role() -> str:
-    return get_jwt().get("role")
+    if hasattr(g, "current_user"):
+        return g.current_user.role
 
-def _ensure_full_session():
-    claims = get_jwt()
-    
-    if claims.get("mfa_pending") or claims.get("mfa_enrollment"):
-        return jsonify({"success": False, "error": "Sessão incompleta."}), 403
-    
-    return None
+    user_id = _get_identity_user_id()
+    if user_id is None:
+        return None
 
-
+    user = db.session.get(User, user_id)
+    return user.role if user else None

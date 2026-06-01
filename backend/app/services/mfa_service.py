@@ -8,6 +8,9 @@ from app.constants import MFA_ISSUER, MFA_VALID_WINDOW
 def setup_mfa(user_id: int) -> tuple[bool, str, str | None, str | None]:
     user = db.session.get(User, user_id)
 
+    if not user or not user.is_active:
+        return False, "Utilizador inválido.", None, None
+
     if user.mfa_enabled:
         return False, "MFA já está ativo. Desative primeiro.", None, None
 
@@ -24,8 +27,11 @@ def setup_mfa(user_id: int) -> tuple[bool, str, str | None, str | None]:
     return True, "QR Code gerado.", secret, otp_uri
 
 
-def confirm_mfa_setup(user_id: int, code: str) -> tuple[bool, str]:
+def confirm_mfa_setup(user_id: int, code: str, commit: bool = True) -> tuple[bool, str]:
     user = db.session.get(User, user_id)
+
+    if not user or not user.is_active:
+        return False, "Utilizador inválido."
 
     if not user.totp_secret:
         return False, "Setup de MFA não iniciado."
@@ -45,7 +51,8 @@ def confirm_mfa_setup(user_id: int, code: str) -> tuple[bool, str]:
         new_value={"mfa_enabled": True},
     )
 
-    db.session.commit()
+    if commit:
+        db.session.commit()
 
     return True, "MFA ativado com sucesso."
 

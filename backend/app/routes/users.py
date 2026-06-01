@@ -7,22 +7,16 @@ from app.utils.responses import error, success
 users_bp = Blueprint("users", __name__, url_prefix="/api/users")
 
 
-def _user_to_dict(user) -> dict:
-    return user_service.user_to_dict(user)
-
-
 @users_bp.route("/", methods=["GET"])
 @admin_required
 def list_users():
-    users = user_service.get_all_users()
-    return success(data=[_user_to_dict(user) for user in users])
+    return success(data=user_service.get_all_gestores())
 
 
 @users_bp.route("/pending", methods=["GET"])
 @admin_required
 def list_pending():
-    users = user_service.get_pending_users()
-    return success(data=[_user_to_dict(user) for user in users])
+    return success(data=user_service.get_pending_gestores())
 
 
 @users_bp.route("/", methods=["POST"])
@@ -33,15 +27,23 @@ def create_user():
         return error("Body JSON inválido ou ausente.", status=400)
 
     email = data.get("email", "").strip().lower()
-    role = data.get("role") or "Gestor"
+    role = data.get("role")
     location_ids = data.get("location_ids", [])
 
-    admin_id = get_current_user_id()
-    ok, message, user = user_service.create_user(email, role, location_ids, admin_id)
-    if not ok:
-        return error(message, status=409)
+    if role == "Administrador":
+        return error(
+            "Administradores só podem ser criados pelo fluxo de transferência.",
+            status=400,
+        )
 
-    return success(data=_user_to_dict(user), message=message, status=201)
+    admin_id = get_current_user_id()
+    ok, message, user, status = user_service.create_gestor(
+        email, location_ids, admin_id
+    )
+    if not ok:
+        return error(message, status=status)
+
+    return success(data=user_service.user_to_dict(user), message=message, status=201)
 
 
 @users_bp.route("/<int:user_id>", methods=["PUT"])
@@ -52,7 +54,7 @@ def update_user(user_id: int):
         return error("Body JSON inválido ou ausente.", status=400)
 
     email = data.get("email", "").strip().lower()
-    role = data.get("role") or "Gestor"
+    role = data.get("role")
     location_ids = data.get("location_ids", [])
 
     ok, message, user = user_service.update_user(
@@ -65,7 +67,7 @@ def update_user(user_id: int):
     if not ok:
         return error(message, status=400)
 
-    return success(data=_user_to_dict(user), message=message)
+    return success(data=user_service.user_to_dict(user), message=message)
 
 
 @users_bp.route("/<int:user_id>", methods=["DELETE"])
@@ -78,4 +80,14 @@ def delete_user(user_id: int):
     if not ok:
         return error(message, status=400)
 
-    return success(data=_user_to_dict(user), message=message)
+    return success(data=user_service.user_to_dict(user), message=message)
+
+
+@users_bp.route("/<int:target_id>/resend-registration", methods=["POST"])
+@admin_required
+def resend_registration(target_id: int):
+    ok, message = user_service.resend_registration_email(target_id)
+    if not ok:
+        return error(message, status=400)
+
+    return success(message=message)
