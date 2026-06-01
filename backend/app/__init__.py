@@ -1,8 +1,9 @@
 import os
 import logging
 import atexit
+from urllib.parse import urlparse
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from app.services.scheduler_service import check_maintenance
@@ -10,6 +11,7 @@ from app.services.scheduler_service import check_maintenance
 from app.config import config_map
 from app.extensions import db, jwt, limiter, mail
 from app.models.base import Base
+from app.utils.responses import error
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,7 @@ def create_app(config_name: str = None) -> Flask:
         config_name = os.environ.get("FLASK_ENV", "development")
 
     app.config.from_object(config_map.get(config_name, config_map["default"]))
+    _register_request_security(app)
 
     # Inicializar extensões
     db.init_app(app)
@@ -58,6 +61,57 @@ def create_app(config_name: str = None) -> Flask:
     _init_scheduler(app)
 
     return app
+
+
+def _register_request_security(app: Flask) -> None:
+    @app.before_request
+    def validate_mutating_request_origin():
+        if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+            return None
+        if not request.path.startswith("/api/"):
+            return None
+
+        source = request.headers.get("Origin") or request.headers.get("Referer")
+        if not source:
+            if app.config.get("REQUIRE_MUTATING_ORIGIN", False):
+                return error("Origem da requisição ausente.", status=403)
+            return None
+
+        if not _is_same_origin(source, _request_origin()):
+            return error("Origem da requisição inválida.", status=403)
+
+        return None
+
+
+def _request_origin() -> str:
+    proto = request.headers.get("X-Forwarded-Proto", request.scheme)
+    host = request.headers.get("X-Forwarded-Host", request.host)
+    return f"{proto}://{host}"
+
+
+def _is_same_origin(source: str, expected: str) -> bool:
+    source_parts = urlparse(source)
+    expected_parts = urlparse(expected)
+
+    source_origin = (
+        source_parts.scheme,
+        source_parts.hostname,
+        source_parts.port or _default_port(source_parts.scheme),
+    )
+    expected_origin = (
+        expected_parts.scheme,
+        expected_parts.hostname,
+        expected_parts.port or _default_port(expected_parts.scheme),
+    )
+    return source_origin == expected_origin
+
+
+def _default_port(scheme: str) -> int | None:
+    if scheme == "http":
+        return 80
+    if scheme == "https":
+        return 443
+    return None
 
 
 def _init_scheduler(app: Flask) -> None:

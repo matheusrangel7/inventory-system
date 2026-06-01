@@ -1,4 +1,24 @@
 const API_BASE = "/api";
+const CSRF_COOKIE_NAME = "csrf_access_token";
+const CSRF_HEADER_NAME = "X-CSRF-TOKEN";
+const CSRF_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+function getCookie(name) {
+    const prefix = `${encodeURIComponent(name)}=`;
+    return document.cookie
+        .split(";")
+        .map(cookie => cookie.trim())
+        .find(cookie => cookie.startsWith(prefix))
+        ?.slice(prefix.length) || "";
+}
+
+function getCsrfHeader(method) {
+    const normalizedMethod = String(method || "GET").toUpperCase();
+    if (!CSRF_METHODS.has(normalizedMethod)) return {};
+
+    const token = decodeURIComponent(getCookie(CSRF_COOKIE_NAME));
+    return token ? { [CSRF_HEADER_NAME]: token } : {};
+}
 
 async function parseResponse(response) {
     const data = await response.json().catch(() => ({}));
@@ -31,6 +51,7 @@ async function refreshSession() {
         credentials: "include",
         headers: {
             "Content-Type": "application/json",
+            ...getCsrfHeader("POST"),
         },
     });
 
@@ -40,6 +61,7 @@ async function refreshSession() {
 
 async function apiRequest(path, options = {}) {
     const { skipRefresh, _retryingAfterRefresh, headers = {}, ...fetchOptions } = options;
+    const method = fetchOptions.method || "GET";
 
     try {
         const response = await fetch(`${API_BASE}${path}`, {
@@ -47,6 +69,7 @@ async function apiRequest(path, options = {}) {
             ...fetchOptions,
             headers: {
                 "Content-Type": "application/json",
+                ...getCsrfHeader(method),
                 ...headers,
             },
         });
