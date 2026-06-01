@@ -21,8 +21,12 @@ class User(Base):
         nullable=False,
         default="Pendente",
     )
-    registration_token: Mapped[Optional[str]] = mapped_column(
+    registration_token_hash: Mapped[Optional[str]] = mapped_column(
         String(64),
+        nullable=True,
+    )
+    registration_token_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
         nullable=True,
     )
 
@@ -31,7 +35,9 @@ class User(Base):
 
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
     )
 
     def __repr__(self) -> str:

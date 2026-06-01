@@ -3,7 +3,8 @@ INSERT INTO users (
     password_hash,
     role,
     registration_status,
-    registration_token,
+    registration_token_hash,
+    registration_token_expires_at,
     mfa_enabled, -- Use authy, google authenticator, etc...
     created_at,
     is_active
@@ -14,6 +15,7 @@ VALUES (
     'Administrador',
     'Concluído',
     NULL,
+    NULL,
     FALSE,
     CURRENT_TIMESTAMP,
     TRUE
@@ -23,7 +25,8 @@ DO UPDATE SET
     password_hash = EXCLUDED.password_hash,
     role = EXCLUDED.role,
     registration_status = EXCLUDED.registration_status,
-    registration_token = EXCLUDED.registration_token,
+    registration_token_hash = EXCLUDED.registration_token_hash,
+    registration_token_expires_at = EXCLUDED.registration_token_expires_at,
     totp_secret = EXCLUDED.totp_secret,
     mfa_enabled = EXCLUDED.mfa_enabled,
     is_active = EXCLUDED.is_active;

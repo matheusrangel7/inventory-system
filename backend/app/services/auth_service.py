@@ -6,6 +6,12 @@ from app.models.user import User
 from app.utils.audit import log_action
 from app.constants import MIN_PASSWORD_LENGTH
 
+from app.services.registration_token_service import (
+    clear_registration_token,
+    hash_token,
+    is_registration_token_expired,
+)
+
 
 def login_user(email: str, password: str) -> tuple[bool, str, User | None]:
 
@@ -39,6 +45,31 @@ def login_user(email: str, password: str) -> tuple[bool, str, User | None]:
     return True, "Login bem-sucedido.", user
 
 
+def get_active_completed_user(user_id: int) -> User | None:
+    user = db.session.get(User, user_id)
+    if not user or not user.is_active:
+        return None
+    if user.registration_status != "Concluído":
+        return None
+    return user
+
+
+def verify_password(user_id: int, password: str) -> tuple[bool, str]:
+    user = get_active_completed_user(user_id)
+    if not user:
+        return False, "Utilizador inválido."
+
+    if user.role != "Administrador":
+        return False, "Acesso restrito a administradores."
+
+    try:
+        ph.verify(user.password_hash, password)
+    except (VerifyMismatchError, VerificationError, InvalidHashError):
+        return False, "Password incorreta."
+
+    return True, "Password verificada."
+
+
 def complete_registration(
     token: str, new_password: str
 ) -> tuple[bool, str, User | None]:
@@ -50,29 +81,32 @@ def complete_registration(
         )
 
     user = db.session.execute(
-        select(User).where(User.registration_token == token)
+        select(User).where(User.registration_token_hash == hash_token(token))
     ).scalar_one_or_none()
 
-    if not user:
+    if not user or not user.is_active:
         return False, "Link de registo inválido ou já utilizado.", None
 
     if user.registration_status == "Concluído":
         return False, "Este registo já foi concluído.", None
 
-    new_hash = ph.hash(new_password)
+    if is_registration_token_expired(user):
+        return False, "Link de registo expirado. Solicite o reenvio.", None
 
     old_status = user.registration_status
 
-    user.password_hash = new_hash
+    user.password_hash = ph.hash(new_password)
     user.registration_status = "Concluído"
-    user.registration_token = None
+    clear_registration_token(user)
 
     log_action(
         action="UPDATE",
         table_name="users",
         record_id=user.user_id,
         old_value={"registration_status": old_status},
-        new_value={"registration_status": "Concluído"},
+        new_value={
+            "registration_status": user.registration_status,
+        },
     )
 
     db.session.commit()
