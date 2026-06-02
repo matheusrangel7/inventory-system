@@ -7,14 +7,21 @@ from app.extensions import db
 from app.models.user_session import UserSession
 from app.constants import MAX_SESSIONS_PER_USER
 
-def create_session(user_id: int, ip: str, user_agent: str) -> str:
+
+def create_session(
+    user_id: int,
+    ip: str,
+    user_agent: str,
+    expires_at: datetime | None = None,
+) -> str:
+    now = datetime.now(timezone.utc)
     active_count = db.session.execute(
         select(func.count())
         .select_from(UserSession)
         .where(
             UserSession.user_id == user_id,
             UserSession.revoked == False,
-            UserSession.expires_at > datetime.now(timezone.utc),
+            UserSession.expires_at > now,
         )
     ).scalar()
 
@@ -27,20 +34,21 @@ def create_session(user_id: int, ip: str, user_agent: str) -> str:
         ).scalar_one()
 
         oldest.revoked = True
-        oldest.revoked_at = datetime.now(timezone.utc)
+        oldest.revoked_at = now
 
     refresh_token = secrets.token_urlsafe(64)
     token_hash = _hash_token(refresh_token)
 
-    days = current_app.config.get("REFRESH_TOKEN_EXPIRES_DAYS", 7)
-    expires = datetime.now(timezone.utc) + timedelta(days=days)
+    if expires_at is None:
+        hours = current_app.config.get("REFRESH_TOKEN_EXPIRES_HOURS", 1)
+        expires_at = now + timedelta(hours=hours)
 
     session = UserSession(
         user_id=user_id,
         refresh_token_hash=token_hash,
         ip_address=ip,
         user_agent=user_agent,
-        expires_at=expires,
+        expires_at=expires_at,
     )
 
     db.session.add(session)
@@ -53,6 +61,7 @@ def rotate_session(
     old_refresh_token: str, ip: str, user_agent: str
 ) -> tuple[bool, str, int | None]:
     token_hash = _hash_token(old_refresh_token)
+    now = datetime.now(timezone.utc)
 
     session = db.session.execute(
         select(UserSession)
@@ -63,20 +72,26 @@ def rotate_session(
     if not session:
         return False, "Sessão inválida.", None
 
-    if datetime.now(timezone.utc) > session.expires_at:
+    if now > session.expires_at:
+        session.revoked = True
+        session.revoked_at = now
+        db.session.commit()
         return False, "Sessão expirada. Faça login novamente.", None
 
     if session.revoked:
-        _revoke_all_sessions(session.user_id)
+        revoke_all_sessions(session.user_id)
         return False, "Sessão comprometida. Todas as sessões foram encerradas.", None
 
+    user_id = session.user_id
+    absolute_expires_at = session.expires_at
+
     session.revoked = True
-    session.revoked_at = datetime.now(timezone.utc)
+    session.revoked_at = now
     db.session.flush()
 
-    new_token = create_session(session.user_id, ip, user_agent)
+    new_token = create_session(user_id, ip, user_agent, expires_at=absolute_expires_at)
 
-    return True, new_token, session.user_id
+    return True, new_token, user_id
 
 
 def revoke_session(refresh_token: str) -> bool:
@@ -97,7 +112,7 @@ def revoke_session(refresh_token: str) -> bool:
     return True
 
 
-def _revoke_all_sessions(user_id: int) -> None:
+def revoke_all_sessions(user_id: int) -> None:
     sessions = (
         db.session.execute(
             select(UserSession).where(
@@ -117,8 +132,10 @@ def _revoke_all_sessions(user_id: int) -> None:
 
     db.session.commit()
 
+
+def _revoke_all_sessions(user_id: int) -> None:
+    revoke_all_sessions(user_id)
+
+
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
-
-def revoke_all_sessions(user_id: int) -> None:
-    _revoke_all_sessions(user_id)

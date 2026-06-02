@@ -1,53 +1,66 @@
 import io
 import base64
+import hmac
 import qrcode
-from datetime import timedelta
 
-from flask import Blueprint, request, make_response
+from flask import Blueprint, request, make_response, current_app
 from flask_jwt_extended import (
     jwt_required,
     get_jwt,
     get_jwt_identity,
-    create_access_token,
 )
 
-from app.services import (
-    auth_service,
-    mfa_service,
-    session_service,
-    admin_transfer_service,
-)
+from app.services import auth_service, mfa_service, session_service
 from app.utils.cookie_helpers import (
     build_auth_response,
     clear_auth_cookies,
     set_mfa_step_cookie,
     get_mfa_step_claims,
     clear_mfa_step_cookie,
+    build_refresh_csrf_token,
 )
 from app.utils.responses import success, error
-from app.extensions import db, limiter
-from app.utils.decorators import admin_required, get_current_user_id
-from app.constants import ADMIN_ACTION_TOKEN_MINUTES, MAX_LOGIN_ATTEMPTS
+from app.models.user import User
+from app.extensions import db
+from app.extensions import limiter
+from app.constants import (
+    CSRF_HEADER_NAME,
+    REFRESH_CSRF_COOKIE_NAME,
+    REFRESH_TOKEN_COOKIE_NAME,
+)
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 
-def _get_user_id_from_claims(claims: dict) -> int | None:
-    try:
-        return int(claims["sub"])
-    except (KeyError, TypeError, ValueError):
-        return None
+def _csrf_enabled() -> bool:
+    return bool(current_app.config.get("JWT_COOKIE_CSRF_PROTECT", False))
 
 
-def _get_user_id_from_identity() -> int | None:
-    try:
-        return int(get_jwt_identity())
-    except (TypeError, ValueError):
+def _refresh_csrf_error():
+    return error("Token CSRF inválido ou ausente.", status=401)
+
+
+def _validate_refresh_csrf(refresh_token: str):
+    if not _csrf_enabled():
         return None
+
+    csrf_header = request.headers.get(CSRF_HEADER_NAME) or request.headers.get("X-CSRFToken")
+    csrf_cookie = request.cookies.get(REFRESH_CSRF_COOKIE_NAME)
+
+    if not csrf_header or not csrf_cookie:
+        return _refresh_csrf_error()
+
+    expected = build_refresh_csrf_token(refresh_token)
+    if not hmac.compare_digest(csrf_cookie, csrf_header):
+        return _refresh_csrf_error()
+    if not hmac.compare_digest(csrf_cookie, expected):
+        return _refresh_csrf_error()
+
+    return None
 
 
 @auth_bp.route("/login", methods=["POST"])
-@limiter.limit(f"{MAX_LOGIN_ATTEMPTS} per minute")
+@limiter.limit("5 per minute")
 def login():
     data = request.get_json(silent=True)
 
@@ -89,16 +102,13 @@ def login():
 
 
 @auth_bp.route("/enroll-mfa/setup", methods=["POST"])
-@limiter.limit(f"{MAX_LOGIN_ATTEMPTS} per minute")
+@limiter.limit("5 per minute")
 def enroll_mfa_setup():
     decoded = get_mfa_step_claims()
     if not decoded or not decoded.get("mfa_enrollment"):
         return error("Sessão de configuração MFA inválida ou expirada.", status=401)
 
-    user_id = _get_user_id_from_claims(decoded)
-    if user_id is None:
-        return error("Sessão de configuração MFA inválida ou expirada.", status=401)
-
+    user_id = int(decoded["sub"])
     ok, message, secret, otp_uri = mfa_service.setup_mfa(user_id)
 
     if not ok:
@@ -113,7 +123,7 @@ def enroll_mfa_setup():
 
 
 @auth_bp.route("/enroll-mfa/confirm", methods=["POST"])
-@limiter.limit(f"{MAX_LOGIN_ATTEMPTS} per minute")
+@limiter.limit("5 per minute")
 def enroll_mfa_confirm():
     decoded = get_mfa_step_claims()
     if not decoded or not decoded.get("mfa_enrollment"):
@@ -124,36 +134,16 @@ def enroll_mfa_confirm():
         return error("Body JSON inválido.", status=400)
 
     code = data.get("code", "").strip()
-    user_id = _get_user_id_from_claims(decoded)
-    if user_id is None:
-        return error("Sessão de configuração MFA inválida ou expirada.", status=401)
+    user_id = int(decoded["sub"])
 
     if not code:
         return error("Código TOTP obrigatório.", status=400)
 
-    has_pending_transfer = admin_transfer_service.has_pending_for_target(user_id)
-
-    ok, message = mfa_service.confirm_mfa_setup(
-        user_id,
-        code,
-        commit=not has_pending_transfer,
-    )
+    ok, message = mfa_service.confirm_mfa_setup(user_id, code)
     if not ok:
         return error(message, status=400)
 
-    if has_pending_transfer and not admin_transfer_service.complete_pending_after_mfa(
-        user_id
-    ):
-        db.session.rollback()
-        return error(
-            "Não foi possível concluir a transferência de administração.",
-            status=400,
-        )
-
-    user = auth_service.get_active_completed_user(user_id)
-    if not user:
-        return error("Utilizador inválido.", status=401)
-
+    user = db.session.get(User, user_id)
     ip = request.remote_addr
     user_agent = request.headers.get("User-Agent", "")
     refresh_token = session_service.create_session(user_id, ip, user_agent)
@@ -168,7 +158,7 @@ def enroll_mfa_confirm():
 
 
 @auth_bp.route("/verify-mfa", methods=["POST"])
-@limiter.limit(f"{MAX_LOGIN_ATTEMPTS} per minute")
+@limiter.limit("5 per minute")
 def verify_mfa():
     decoded = get_mfa_step_claims()
     if not decoded or not decoded.get("mfa_pending"):
@@ -179,9 +169,7 @@ def verify_mfa():
         return error("Body JSON inválido.", status=400)
 
     code = data.get("code", "").strip()
-    user_id = _get_user_id_from_claims(decoded)
-    if user_id is None:
-        return error("Sessão MFA inválida ou expirada.", status=401)
+    user_id = int(decoded["sub"])
 
     if not code:
         return error("Código TOTP obrigatório.", status=400)
@@ -190,9 +178,7 @@ def verify_mfa():
     if not ok:
         return error(message, status=401)
 
-    user = auth_service.get_active_completed_user(user_id)
-    if not user:
-        return error("Utilizador inválido.", status=401)
+    user = db.session.get(User, user_id)
 
     ip = request.remote_addr
     user_agent = request.headers.get("User-Agent", "")
@@ -209,10 +195,14 @@ def verify_mfa():
 
 @auth_bp.route("/refresh", methods=["POST"])
 def refresh():
-    refresh_token = request.cookies.get("refresh_token")
+    refresh_token = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
 
     if not refresh_token:
         return error("Refresh token ausente.", status=401)
+
+    csrf_blocked = _validate_refresh_csrf(refresh_token)
+    if csrf_blocked:
+        return csrf_blocked
 
     ip = request.remote_addr
     user_agent = request.headers.get("User-Agent", "")
@@ -223,11 +213,7 @@ def refresh():
         resp = make_response(error(result, status=401))
         return clear_auth_cookies(resp)
 
-    user = auth_service.get_active_completed_user(user_id)
-
-    if not user:
-        resp = make_response(error("Utilizador inválido.", status=401))
-        return clear_auth_cookies(resp)
+    user = db.session.get(User, user_id)
 
     return build_auth_response(
         user=user,
@@ -238,9 +224,12 @@ def refresh():
 
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
-    refresh_token = request.cookies.get("refresh_token")
+    refresh_token = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
 
     if refresh_token:
+        csrf_blocked = _validate_refresh_csrf(refresh_token)
+        if csrf_blocked:
+            return csrf_blocked
         session_service.revoke_session(refresh_token)
 
     resp = make_response(success(message="Sessão encerrada."))
@@ -286,6 +275,7 @@ def complete_registration():
     )
     response = make_response(resp_body, status)
 
+    clear_auth_cookies(response)
     set_mfa_step_cookie(
         response,
         user.user_id,
@@ -299,34 +289,6 @@ def complete_registration():
     return response
 
 
-@auth_bp.route("/verify-password", methods=["POST"])
-@admin_required
-def verify_password():
-    data = request.get_json(silent=True)
-    if not data:
-        return error("Body JSON inválido.", status=400)
-
-    password = data.get("password", "")
-    if not password:
-        return error("Password obrigatória.", status=400)
-
-    user_id = get_current_user_id()
-    ok, message = auth_service.verify_password(user_id, password)
-    if not ok:
-        return error(message, status=401)
-
-    action_token = create_access_token(
-        identity=str(user_id),
-        additional_claims={
-            "action": "transfer_admin",
-            "authorized": True,
-        },
-        expires_delta=timedelta(minutes=ADMIN_ACTION_TOKEN_MINUTES),
-    )
-
-    return success(data={"action_token": action_token})
-
-
 @auth_bp.route("/me", methods=["GET"])
 @jwt_required()
 def me():
@@ -334,12 +296,9 @@ def me():
     if claims.get("mfa_pending") or claims.get("mfa_enrollment"):
         return error("Sessão incompleta.", status=403)
 
-    user_id = _get_user_id_from_identity()
-    if user_id is None:
-        return error("Utilizador inválido.", status=401)
-
-    user = auth_service.get_active_completed_user(user_id)
-    if not user:
+    user_id = int(get_jwt_identity())
+    user = db.session.get(User, user_id)
+    if not user or not user.is_active:
         return error("Utilizador inválido.", status=401)
 
     return success(

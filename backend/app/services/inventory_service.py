@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from math import ceil
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import Float, String, and_, cast, func, or_, select
 
 from app.extensions import db
 from app.models.inventory import Asset, AssetSpec, Category, Feature
@@ -510,6 +510,49 @@ def _get_specs_for_asset(asset_id: int) -> tuple[dict, list[dict]]:
     return specs, details
 
 
+
+
+def _get_specs_for_assets(asset_ids: list[int]) -> dict[int, tuple[dict[str, Any], list[dict]]]:
+    """Carrega specs de vários ativos numa só query para evitar N+1 queries."""
+    if not asset_ids:
+        return {}
+
+    rows = db.session.execute(
+        select(AssetSpec.asset_id, Feature, AssetSpec)
+        .join(Feature, Feature.feature_id == AssetSpec.feature_id)
+        .where(
+            AssetSpec.asset_id.in_(asset_ids),
+            AssetSpec.is_active == True,
+        )
+        .order_by(AssetSpec.asset_id.asc(), Feature.is_active.desc(), Feature.feature_name.asc())
+    ).all()
+
+    grouped: dict[int, tuple[dict[str, Any], list[dict]]] = {
+        int(asset_id): ({}, []) for asset_id in asset_ids
+    }
+
+    for asset_id, feature, spec in rows:
+        specs, details = grouped.setdefault(int(asset_id), ({}, []))
+        value = spec.content
+        is_multiple = bool(getattr(feature, "is_multiple", False))
+        feature_is_active = bool(getattr(feature, "is_active", False))
+        specs[feature.feature_name] = value
+        details.append({
+            "spec_id": spec.spec_id,
+            "feature_id": feature.feature_id,
+            "feature_name": feature.feature_name,
+            "feature_type": feature.feature_type,
+            "is_multiple": is_multiple,
+            "is_repeatable": is_multiple,
+            "feature_is_active": feature_is_active,
+            "feature_status": "Ativa" if feature_is_active else "Desativada",
+            "is_archived_feature": not feature_is_active,
+            "content": value,
+            "spec_value": value,
+        })
+
+    return grouped
+
 def asset_to_dict(
     asset: Asset,
     category_name: str | None = None,
@@ -624,41 +667,217 @@ def _asset_matches_spec_filters(asset: dict, spec_filters: list[dict] | None) ->
     return True
 
 
-def _sort_assets(assets: list[dict], sort: str | None) -> list[dict]:
-    sort = sort or "date-desc"
-    sort_map = {
-        "category-asc": (lambda a: _norm(a.get("category_name")), False),
-        "category-desc": (lambda a: _norm(a.get("category_name")), True),
-        "location-asc": (lambda a: _norm(a.get("location_name")), False),
-        "location-desc": (lambda a: _norm(a.get("location_name")), True),
-        "status-asc": (lambda a: _norm(a.get("asset_state")), False),
-        "status-desc": (lambda a: _norm(a.get("asset_state")), True),
-        "date-desc": (lambda a: a.get("registered_at") or "", True),
-        "date-asc": (lambda a: a.get("registered_at") or "", False),
-        "id-asc": (lambda a: int(a.get("asset_id") or 0), False),
-        "id-desc": (lambda a: int(a.get("asset_id") or 0), True),
-    }
-    key_func, reverse = sort_map.get(sort, sort_map["date-desc"])
-    return sorted(assets, key=key_func, reverse=reverse)
 
-
-def _paginate(items: list[dict], page: int | None, page_size: int | None) -> dict:
+def _safe_page_values(page: int | None, page_size: int | None, total: int) -> tuple[int, int, int, int, int]:
     safe_page_size = max(1, min(int(page_size or 10), 100))
-    total = len(items)
     total_pages = max(1, ceil(total / safe_page_size))
     safe_page = max(1, min(int(page or 1), total_pages))
-    start = (safe_page - 1) * safe_page_size
-    end = start + safe_page_size
+    offset = (safe_page - 1) * safe_page_size
+    limit = safe_page_size
+    return safe_page, safe_page_size, total_pages, offset, limit
+
+
+def _pagination_payload(page: int, page_size: int, total_pages: int, total: int) -> dict:
+    start = (page - 1) * page_size
+    end = start + page_size
     return {
-        "items": items[start:end],
-        "pagination": {
-            "page": safe_page,
-            "page_size": safe_page_size,
-            "total": total,
-            "total_pages": total_pages,
-            "start_index": start + 1 if total else 0,
-            "end_index": min(end, total),
-        },
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages,
+        "start_index": start + 1 if total else 0,
+        "end_index": min(end, total),
+    }
+
+
+def _sort_expression(sort: str | None):
+    sort = sort or "date-desc"
+    sort_map = {
+        "category-asc": Category.category_name.asc(),
+        "category-desc": Category.category_name.desc(),
+        "location-asc": Location.location_name.asc(),
+        "location-desc": Location.location_name.desc(),
+        "status-asc": Asset.asset_state.asc(),
+        "status-desc": Asset.asset_state.desc(),
+        "date-desc": Asset.registered_at.desc(),
+        "date-asc": Asset.registered_at.asc(),
+        "id-asc": Asset.asset_id.asc(),
+        "id-desc": Asset.asset_id.desc(),
+    }
+    return sort_map.get(sort, sort_map["date-desc"])
+
+
+def _asset_search_conditions(word: str):
+    pattern = f"%{word}%"
+    specs_exists = (
+        select(AssetSpec.spec_id)
+        .join(Feature, Feature.feature_id == AssetSpec.feature_id)
+        .where(
+            AssetSpec.asset_id == Asset.asset_id,
+            AssetSpec.is_active == True,
+            or_(
+                Feature.feature_name.ilike(pattern),
+                cast(Feature.feature_type, String).ilike(pattern),
+                cast(AssetSpec.content, String).ilike(pattern),
+            ),
+        )
+        .exists()
+    )
+    return or_(
+        cast(Asset.asset_id, String).ilike(pattern),
+        Asset.serial_number.ilike(pattern),
+        Category.category_name.ilike(pattern),
+        Location.location_name.ilike(pattern),
+        cast(Asset.asset_state, String).ilike(pattern),
+        Asset.assigned_to.ilike(pattern),
+        cast(Asset.registered_at, String).ilike(pattern),
+        specs_exists,
+    )
+
+
+def _json_text_expression():
+    return cast(AssetSpec.content, String)
+
+
+def _apply_spec_filter(query, raw_filter: dict):
+    feature_id = _to_int(raw_filter.get("feature_id") or raw_filter.get("id"))
+    feature_name = _clean_text(raw_filter.get("feature_name") or raw_filter.get("name"))
+    operator = _norm(raw_filter.get("operator") or "contains")
+    expected = _clean_text(raw_filter.get("value"))
+
+    conditions = [
+        AssetSpec.asset_id == Asset.asset_id,
+        AssetSpec.is_active == True,
+    ]
+    if feature_id:
+        conditions.append(AssetSpec.feature_id == feature_id)
+    elif feature_name:
+        conditions.append(Feature.feature_name.ilike(f"%{feature_name}%"))
+
+    content_text = _json_text_expression()
+    comparable_content = func.lower(func.replace(content_text, '"', ''))
+    expected_norm = expected.lower()
+
+    if operator in {"exists", "has_value"}:
+        value_condition = AssetSpec.content.is_not(None)
+    elif not expected:
+        value_condition = AssetSpec.content.is_not(None)
+    elif operator in {"equals", "eq", "igual"}:
+        value_condition = comparable_content == expected_norm
+    elif operator in {"not_equals", "ne", "diferente"}:
+        value_condition = comparable_content != expected_norm
+    elif operator in {"not_contains", "nao_contem"}:
+        value_condition = ~content_text.ilike(f"%{expected}%")
+    elif operator in {"gt", "gte", "lt", "lte", "greater_than", "greater_or_equal", "less_than", "less_or_equal"}:
+        try:
+            expected_number = float(expected.replace(",", "."))
+        except ValueError:
+            value_condition = False
+        else:
+            numeric_content = cast(AssetSpec.content.astext, Float)
+            if operator in {"gt", "greater_than"}:
+                value_condition = numeric_content > expected_number
+            elif operator in {"gte", "greater_or_equal"}:
+                value_condition = numeric_content >= expected_number
+            elif operator in {"lt", "less_than"}:
+                value_condition = numeric_content < expected_number
+            else:
+                value_condition = numeric_content <= expected_number
+    else:
+        value_condition = content_text.ilike(f"%{expected}%")
+
+    conditions.append(value_condition)
+    return query.where(
+        select(AssetSpec.spec_id)
+        .join(Feature, Feature.feature_id == AssetSpec.feature_id)
+        .where(and_(*conditions))
+        .exists()
+    )
+
+
+def _base_assets_query():
+    return (
+        select(Asset, Category.category_name, Location.location_name)
+        .join(Category, Category.category_id == Asset.category_id)
+        .join(Location, Location.location_id == Asset.location_id)
+        .where(Asset.is_active == True, Category.is_active == True, Location.is_active == True)
+    )
+
+
+def _apply_asset_filters(
+    query,
+    *,
+    location_id=None,
+    category_id=None,
+    asset_state=None,
+    assigned=None,
+    manager_id=None,
+    search: str | None = None,
+    category_name: str | None = None,
+    location_name: str | None = None,
+    spec_filters: list[dict] | None = None,
+):
+    if manager_id is not None:
+        query = query.where(Location.location_manager_id == manager_id)
+    if location_id:
+        query = query.where(Asset.location_id == location_id)
+    if category_id:
+        query = query.where(Asset.category_id == category_id)
+    if asset_state:
+        query = query.where(Asset.asset_state == asset_state)
+    if assigned == "assigned":
+        query = query.where(Asset.assigned_to.is_not(None), Asset.assigned_to != "")
+    if assigned == "unassigned":
+        query = query.where(or_(Asset.assigned_to.is_(None), Asset.assigned_to == ""))
+    if category_name:
+        query = query.where(func.lower(Category.category_name) == _norm(category_name))
+    if location_name:
+        query = query.where(func.lower(Location.location_name) == _norm(location_name))
+
+    for word in _norm(search).split():
+        query = query.where(_asset_search_conditions(word))
+
+    for raw_filter in spec_filters or []:
+        query = _apply_spec_filter(query, raw_filter)
+
+    return query
+
+
+def _rows_to_asset_dicts(rows) -> list[dict]:
+    asset_ids = [int(asset.asset_id) for asset, _, _ in rows]
+    specs_by_asset = _get_specs_for_assets(asset_ids)
+    return [
+        asset_to_dict(
+            asset,
+            category_name_loaded,
+            location_name_loaded,
+            *(specs_by_asset.get(int(asset.asset_id), ({}, []))),
+        )
+        for asset, category_name_loaded, location_name_loaded in rows
+    ]
+
+
+def get_assets_summary(manager_id: int | None = None) -> dict:
+    query = (
+        select(Asset.asset_state, func.count(Asset.asset_id))
+        .join(Location, Location.location_id == Asset.location_id)
+        .join(Category, Category.category_id == Asset.category_id)
+        .where(Asset.is_active == True, Location.is_active == True, Category.is_active == True)
+    )
+    if manager_id is not None:
+        query = query.where(Location.location_manager_id == manager_id)
+
+    rows = db.session.execute(query.group_by(Asset.asset_state)).all()
+    state_counts = {state: int(count) for state, count in rows}
+    total = sum(state_counts.values())
+
+    return {
+        "total": total,
+        "state_counts": state_counts,
+        "states": [
+            {"asset_state": state, "count": state_counts.get(state, 0)}
+            for state in VALID_ASSET_STATES
+        ],
     }
 
 
@@ -676,40 +895,33 @@ def get_assets_by_filters(
     page: int | None = None,
     page_size: int | None = None,
 ):
-    query = (
-        select(Asset, Category.category_name, Location.location_name)
-        .join(Category, Category.category_id == Asset.category_id)
-        .join(Location, Location.location_id == Asset.location_id)
-        .where(Asset.is_active == True, Category.is_active == True, Location.is_active == True)
+    query = _apply_asset_filters(
+        _base_assets_query(),
+        location_id=location_id,
+        category_id=category_id,
+        asset_state=asset_state,
+        assigned=assigned,
+        manager_id=manager_id,
+        search=search,
+        category_name=category_name,
+        location_name=location_name,
+        spec_filters=spec_filters,
     )
-    if manager_id is not None:
-        query = query.where(Location.location_manager_id == manager_id)
-    if location_id:
-        query = query.where(Asset.location_id == location_id)
-    if category_id:
-        query = query.where(Asset.category_id == category_id)
-    if asset_state:
-        query = query.where(Asset.asset_state == asset_state)
-    if assigned == "assigned":
-        query = query.where(Asset.assigned_to.is_not(None))
-    if assigned == "unassigned":
-        query = query.where(Asset.assigned_to.is_(None))
 
-    rows = db.session.execute(query).all()
-    assets = [asset_to_dict(asset, category_name_loaded, location_name_loaded) for asset, category_name_loaded, location_name_loaded in rows]
-
-    if category_name:
-        assets = [asset for asset in assets if _norm(asset.get("category_name")) == _norm(category_name)]
-    if location_name:
-        assets = [asset for asset in assets if _norm(asset.get("location_name")) == _norm(location_name)]
-
-    assets = [asset for asset in assets if _asset_matches_search(asset, search)]
-    assets = [asset for asset in assets if _asset_matches_spec_filters(asset, spec_filters)]
-    assets = _sort_assets(assets, sort)
+    query = query.order_by(_sort_expression(sort), Asset.asset_id.desc())
 
     if page is not None or page_size is not None:
-        return _paginate(assets, page, page_size)
-    return assets
+        count_query = select(func.count()).select_from(query.order_by(None).subquery())
+        total = int(db.session.execute(count_query).scalar() or 0)
+        safe_page, safe_page_size, total_pages, offset, limit = _safe_page_values(page, page_size, total)
+        rows = db.session.execute(query.offset(offset).limit(limit)).all()
+        return {
+            "items": _rows_to_asset_dicts(rows),
+            "pagination": _pagination_payload(safe_page, safe_page_size, total_pages, total),
+        }
+
+    rows = db.session.execute(query).all()
+    return _rows_to_asset_dicts(rows)
 
 
 def get_asset_by_id(asset_id: int, manager_id: int | None = None) -> dict | None:

@@ -135,3 +135,70 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
 );
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- Tabelas auxiliares usadas em filtros, joins e listagens
+CREATE INDEX IF NOT EXISTS idx_users_active_role
+    ON users (is_active, role);
+
+CREATE INDEX IF NOT EXISTS idx_locations_active_manager
+    ON locations (is_active, location_manager_id);
+
+CREATE INDEX IF NOT EXISTS idx_categories_active_name
+    ON categories (is_active, category_name);
+
+CREATE INDEX IF NOT EXISTS idx_features_active_category
+    ON features (category_id, is_active);
+
+-- filtros principais e ordenação/paginação dos ativos
+CREATE INDEX IF NOT EXISTS idx_assets_active_registered
+    ON assets (registered_at DESC, asset_id DESC)
+    WHERE is_active = TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_assets_active_category
+    ON assets (category_id)
+    WHERE is_active = TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_assets_active_location
+    ON assets (location_id)
+    WHERE is_active = TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_assets_active_state
+    ON assets (asset_state)
+    WHERE is_active = TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_assets_active_assigned
+    ON assets (assigned_to)
+    WHERE is_active = TRUE;
+
+-- Specs/características dos ativos.
+CREATE INDEX IF NOT EXISTS idx_asset_specs_active_asset
+    ON asset_specs (asset_id)
+    WHERE is_active = TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_asset_specs_active_feature_asset
+    ON asset_specs (feature_id, asset_id)
+    WHERE is_active = TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_asset_specs_content_gin
+    ON asset_specs USING gin (content);
+
+-- Pesquisa textual com ILIKE/%termo%.
+CREATE INDEX IF NOT EXISTS idx_assets_serial_trgm
+    ON assets USING gin (serial_number gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS idx_assets_assigned_trgm
+    ON assets USING gin (assigned_to gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS idx_categories_name_trgm
+    ON categories USING gin (category_name gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS idx_locations_name_trgm
+    ON locations USING gin (location_name gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS idx_features_name_trgm
+    ON features USING gin (feature_name gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS idx_asset_specs_content_text_trgm
+    ON asset_specs USING gin ((content::text) gin_trgm_ops);

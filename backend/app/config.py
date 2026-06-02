@@ -1,7 +1,7 @@
 import os
 from datetime import timedelta
 
-from app.constants import ACCESS_TOKEN_MINUTES, REFRESH_TOKEN_DAYS
+from app.constants import ACCESS_TOKEN_MINUTES, REFRESH_TOKEN_HOURS
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -36,24 +36,23 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     JWT_TOKEN_LOCATION = ["cookies"]
-
-    # HTTPS local:
-    JWT_COOKIE_SECURE=True
-    #
-    # HTTP local:
-    # JWT_COOKIE_SECURE=false
-
     JWT_COOKIE_SECURE = env_bool("JWT_COOKIE_SECURE", False)
     JWT_COOKIE_SAMESITE = os.environ.get("JWT_COOKIE_SAMESITE", "Lax")
-    JWT_COOKIE_CSRF_PROTECT = env_bool("JWT_COOKIE_CSRF_PROTECT", True)
-    REQUIRE_MUTATING_ORIGIN = env_bool("REQUIRE_MUTATING_ORIGIN", False)
+    JWT_COOKIE_CSRF_PROTECT = env_bool("JWT_COOKIE_CSRF_PROTECT", False)
+    JWT_CSRF_IN_COOKIES = True
+    JWT_ACCESS_CSRF_COOKIE_NAME = "csrf_access_token"
+    JWT_ACCESS_CSRF_COOKIE_PATH = "/"
+    JWT_ACCESS_CSRF_HEADER_NAME = "X-CSRF-TOKEN"
+    JWT_REFRESH_CSRF_COOKIE_NAME = "csrf_refresh_token"
+    JWT_REFRESH_CSRF_COOKIE_PATH = "/"
+    JWT_REFRESH_CSRF_HEADER_NAME = "X-CSRF-TOKEN"
 
     JWT_ACCESS_COOKIE_PATH = "/api/"
     JWT_REFRESH_COOKIE_PATH = "/api/auth/refresh"
 
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=ACCESS_TOKEN_MINUTES)
-    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=REFRESH_TOKEN_DAYS)
-    REFRESH_TOKEN_EXPIRES_DAYS = REFRESH_TOKEN_DAYS
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(hours=REFRESH_TOKEN_HOURS)
+    REFRESH_TOKEN_EXPIRES_HOURS = REFRESH_TOKEN_HOURS
 
     MAIL_SERVER = os.environ.get("MAIL_SERVER", "mailhog")
     MAIL_PORT = int(os.environ.get("MAIL_PORT", "1025"))
@@ -77,7 +76,6 @@ class ProductionConfig(Config):
     DEBUG = False
     JWT_COOKIE_SECURE = env_bool("JWT_COOKIE_SECURE", True)
     JWT_COOKIE_CSRF_PROTECT = env_bool("JWT_COOKIE_CSRF_PROTECT", True)
-    REQUIRE_MUTATING_ORIGIN = env_bool("REQUIRE_MUTATING_ORIGIN", True)
 
 
 config_map = {

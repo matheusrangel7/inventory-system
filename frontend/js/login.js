@@ -75,7 +75,7 @@
         setLoading(true);
         clearError();
 
-        const result = await api.post("/auth/login", { email, password });
+        const result = await api.post("/auth/login", { email, password }, { skipSessionExpiredRedirect: true });
 
         setLoading(false);
 
@@ -106,7 +106,7 @@
         setMfaLoading(true);
         clearMfaError();
 
-        const result = await api.post("/auth/verify-mfa", { code });
+        const result = await api.post("/auth/verify-mfa", { code }, { skipSessionExpiredRedirect: true });
 
         setMfaLoading(false);
 
@@ -118,8 +118,14 @@
         redirectAfterAuth(result.data);
     }
 
-    if (new URLSearchParams(location.search).get("registered") === "1") {
+    const params = new URLSearchParams(location.search);
+
+    if (params.get("registered") === "1") {
         registerSuccess?.classList.remove("hidden");
+    }
+
+    if (params.get("session") === "expired") {
+        showError("A tua sessão expirou. Inicia sessão novamente para continuar.");
     }
 
     form?.addEventListener("submit", async (e) => {

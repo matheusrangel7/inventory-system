@@ -85,6 +85,13 @@ def list_features_for_category_alias(category_id: int):
     return success(data=[inventory_service.feature_to_dict(feature) for feature in features])
 
 
+@assets_bp.route("/summary", methods=["GET"])
+@manager_required
+def assets_summary():
+    summary = inventory_service.get_assets_summary(manager_id=effective_manager_id())
+    return success(data=summary)
+
+
 @assets_bp.route("/", methods=["GET"])
 @manager_required
 def search_assets():

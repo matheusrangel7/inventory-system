@@ -4,6 +4,7 @@ let meuGraficoAtividade = null;
 
 let cacheUtilizadores = [];
 let cacheAtivos = [];
+let cacheResumoAtivos = { total: 0, state_counts: {}, states: [] };
 let cacheLocais = [];
 let cacheCategorias = [];
 let cacheRegistos = [];
@@ -16,6 +17,7 @@ let paginaInicializada = false;
 let dashboardUtilityObserverStarted = false;
 const TABLE_PAGE_SIZE = 10;
 const ASSET_SEARCH_DEBOUNCE_MS = 250;
+const ASSET_STATE_DEFAULT_ORDER = ["Bom Estado", "Necessita Manutenção", "Avariado", "Para Abate"];
 const LOG_CHART_DEFAULT_PERIOD = "year";
 const LOG_CHART_PERIOD_LABELS = {
     all: "Todo o tempo",
@@ -144,7 +146,6 @@ const cleanSearchConfigs = {
 };
 
 function showView(viewName) {
-    console.log("[Navegacao] Mudar para view: " + viewName);
     activeView = viewName;
 
     const views = ["dashboard", "utilizadores", "locais", "ativos", "categorias", "registos"];
@@ -182,16 +183,17 @@ async function recarregarDados() {
 
 async function carregarDados() {
     try {
-        const [users, assets, locations, categories, logs] = await Promise.all([
+        const [users, assetSummary, locations, categories, logs] = await Promise.all([
             fetchArray("/users/"),
-            fetchArray("/assets/"),
+            fetchAssetSummary(),
             fetchArray("/locations/"),
             fetchArray("/categories/?include_features=true"),
             fetchArray("/logs/")
         ]);
 
         cacheUtilizadores = users;
-        cacheAtivos = assets;
+        cacheResumoAtivos = normalizarResumoAtivos(assetSummary);
+        cacheAtivos = [];
         cacheLocais = locations.length ? locations : derivarLocaisDosAtivos(cacheAtivos);
         cacheCategorias = categories.length ? categories : derivarCategoriasDosAtivos(cacheAtivos);
         cacheFeaturesPorCategoria = {};
@@ -202,9 +204,13 @@ async function carregarDados() {
         });
         cacheRegistos = logs;
 
-        document.getElementById("count-users").innerText = cacheUtilizadores.length;
-        document.getElementById("count-assets").innerText = cacheAtivos.length;
-        document.getElementById("count-locations").innerText = cacheLocais.length;
+        const countUsers = document.getElementById("count-users");
+        const countAssets = document.getElementById("count-assets");
+        const countLocations = document.getElementById("count-locations");
+
+        if (countUsers) countUsers.innerText = cacheUtilizadores.length;
+        if (countAssets) countAssets.innerText = getAssetSummaryTotal();
+        if (countLocations) countLocations.innerText = cacheLocais.length;
 
         popularOpcoesDosFiltros();
         atualizarSelectsDosModais();
@@ -245,6 +251,92 @@ async function fetchArray(endpoint) {
         console.warn(`[API] Nao foi possivel carregar ${endpoint}:`, error);
         return [];
     }
+}
+
+function normalizarResumoAtivos(rawSummary = {}) {
+    const summary = rawSummary && typeof rawSummary === "object" ? rawSummary : {};
+    const stateCounts = {};
+    const rawStateCounts = summary.state_counts || summary.status_counts || summary.asset_state_counts || {};
+
+    Object.entries(rawStateCounts || {}).forEach(([state, count]) => {
+        const label = String(state || "").trim();
+        if (!label) return;
+        stateCounts[label] = Number(count) || 0;
+    });
+
+    if (Array.isArray(summary.states)) {
+        summary.states.forEach(item => {
+            const label = primeiroValor(item, ["asset_state", "state", "status", "label", "name"], "");
+            if (!label) return;
+            stateCounts[label] = Number(primeiroValor(item, ["count", "total", "value"], stateCounts[label] || 0)) || 0;
+        });
+    }
+
+    const totalFromSummary = Number(primeiroValor(summary, ["total", "asset_count", "total_assets"], 0)) || 0;
+    const totalFromStates = Object.values(stateCounts).reduce((sum, value) => sum + (Number(value) || 0), 0);
+    const total = totalFromSummary || totalFromStates;
+
+    const orderedStates = [
+        ...ASSET_STATE_DEFAULT_ORDER.filter(state => Object.prototype.hasOwnProperty.call(stateCounts, state)),
+        ...Object.keys(stateCounts).filter(state => !ASSET_STATE_DEFAULT_ORDER.includes(state))
+    ];
+
+    return {
+        total,
+        state_counts: stateCounts,
+        states: orderedStates.map(state => ({
+            asset_state: state,
+            count: stateCounts[state] || 0
+        }))
+    };
+}
+
+async function fetchAssetSummary() {
+    try {
+        const json = await fetchJSON("/assets/summary");
+        return normalizarResumoAtivos(json.data || {});
+    } catch (error) {
+        console.warn("[API] Nao foi possivel carregar /assets/summary; vou tentar obter apenas a primeira pagina.", error);
+    }
+
+    try {
+        const json = await fetchJSON("/assets/?page=1&page_size=1");
+        const data = json.data || {};
+        const pagination = data.pagination || {};
+        return normalizarResumoAtivos({
+            total: Number(pagination.total ?? data.total ?? 0) || 0
+        });
+    } catch (error) {
+        console.warn("[API] Nao foi possivel obter total de ativos por fallback.", error);
+        return normalizarResumoAtivos({ total: cacheAtivos.length });
+    }
+}
+
+function getAssetSummaryTotal() {
+    return Number(cacheResumoAtivos?.total || 0);
+}
+
+function getAssetSummaryStateEntries() {
+    const summary = normalizarResumoAtivos(cacheResumoAtivos);
+    return (summary.states || [])
+        .filter(item => String(item.asset_state || "").trim())
+        .map(item => ({
+            label: item.asset_state,
+            count: Number(item.count) || 0
+        }));
+}
+
+function obterEstadosAtivosDisponiveis() {
+    const summaryStates = getAssetSummaryStateEntries()
+        .filter(item => item.count > 0)
+        .map(item => item.label);
+
+    if (summaryStates.length) return summaryStates;
+
+    const cachedStates = valoresUnicos(cacheAtivos.map(getAssetStatus));
+    if (cachedStates.length) return cachedStates;
+
+    return ASSET_STATE_DEFAULT_ORDER;
 }
 
 function popularTabelas() {
@@ -452,7 +544,7 @@ function popularOpcoesDosFiltros() {
 
     popularSelectFromRecords("assets-category", cacheCategorias, getCategoryId, getCategoryName, "Todas");
     popularSelectFromRecords("assets-location", cacheLocais, getLocationId, getLocationName, "Todas");
-    popularSelect("assets-status", valoresUnicos(cacheAtivos.map(getAssetStatus)), "Todos");
+    popularSelect("assets-status", obterEstadosAtivosDisponiveis(), "Todos");
     popularOpcoesFeaturesSpecsAtivos();
     atualizarPainelFeaturesCategoriaAtivos();
     renderAssetsTableHead();
@@ -1546,9 +1638,11 @@ async function renderAssetsTable() {
 
         const data = json.data || {};
         const assets = Array.isArray(data.items) ? data.items : (Array.isArray(data) ? data : []);
+        cacheAtivos = assets;
         const pagination = paginationFromApi(data.pagination, assets.length);
+        const totalAssets = getAssetSummaryTotal() || pagination.total || assets.length;
 
-        atualizarContador("assetsResultCount", pagination.total, cacheAtivos.length || pagination.total);
+        atualizarContador("assetsResultCount", pagination.total, totalAssets);
         renderPagination("assets", pagination);
 
         if (!assets.length) {
@@ -1559,7 +1653,7 @@ async function renderAssetsTable() {
         tbody.innerHTML = assets.map(renderAssetTableRow).join("");
     } catch (error) {
         console.warn("[API] Pesquisa de ativos falhou:", error);
-        atualizarContador("assetsResultCount", 0, cacheAtivos.length);
+        atualizarContador("assetsResultCount", 0, getAssetSummaryTotal() || cacheAtivos.length);
         renderPagination("assets", {
             total: 0,
             totalPages: 1,
@@ -2102,6 +2196,15 @@ function atualizarResumoGraficoRegistos(dadosRegistos) {
 }
 
 function criarDadosAtividadePorEstado() {
+    const summaryStates = getAssetSummaryStateEntries().filter(item => item.count > 0);
+
+    if (summaryStates.length) {
+        return DashboardCommon.sortCountData({
+            labels: summaryStates.map(item => item.label),
+            values: summaryStates.map(item => item.count)
+        }, ASSET_STATE_DEFAULT_ORDER);
+    }
+
     if (!cacheAtivos.length) {
         return {
             labels: ["Sem dados"],
@@ -2121,12 +2224,7 @@ function criarDadosAtividadePorEstado() {
         values: Array.from(estados.values())
     };
 
-    return DashboardCommon.sortCountData(dados, [
-        "Bom Estado",
-        "Necessita Manutenção",
-        "Avariado",
-        "Para Abate"
-    ]);
+    return DashboardCommon.sortCountData(dados, ASSET_STATE_DEFAULT_ORDER);
 }
 
 function inicializarGraficos() {
@@ -2312,7 +2410,7 @@ function getAssetLocation(a) {
 }
 
 function getAssetStatus(a) {
-    return primeiroValor(a, ["status", "estado", "state"], "Bom");
+    return primeiroValor(a, ["asset_state", "status", "estado", "state"], "Bom Estado");
 }
 
 
@@ -3891,4 +3989,3 @@ function initAdminDashboard() {
 }
 
 window.initAdminDashboard = initAdminDashboard;
-initAdminDashboard();
