@@ -1,6 +1,8 @@
 import io
 import base64
 import hmac
+from datetime import timedelta
+
 import qrcode
 
 from flask import Blueprint, request, make_response, current_app
@@ -8,6 +10,7 @@ from flask_jwt_extended import (
     jwt_required,
     get_jwt,
     get_jwt_identity,
+    create_access_token,
 )
 
 from app.services import auth_service, mfa_service, session_service
@@ -27,6 +30,7 @@ from app.constants import (
     CSRF_HEADER_NAME,
     REFRESH_CSRF_COOKIE_NAME,
     REFRESH_TOKEN_COOKIE_NAME,
+    ADMIN_ACTION_TOKEN_MINUTES,
 )
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
@@ -219,6 +223,46 @@ def refresh():
         user=user,
         refresh_token=result,
         data={"user_id": user.user_id, "email": user.email, "role": user.role},
+    )
+
+
+@auth_bp.route("/verify-password", methods=["POST"])
+@jwt_required()
+@limiter.limit("5 per minute")
+def verify_password():
+    claims = get_jwt()
+    if claims.get("mfa_pending") or claims.get("mfa_enrollment"):
+        return error("Sessão incompleta.", status=403)
+
+    data = request.get_json(silent=True)
+    if not data:
+        return error("Body JSON inválido ou ausente.", status=400)
+
+    password = data.get("password", "")
+    if not password:
+        return error("Password obrigatória.", status=400)
+
+    try:
+        user_id = int(get_jwt_identity())
+    except (TypeError, ValueError):
+        return error("Utilizador inválido.", status=401)
+
+    ok, message = auth_service.verify_password(user_id, password)
+    if not ok:
+        return error(message, status=401)
+
+    action_token = create_access_token(
+        identity=str(user_id),
+        additional_claims={
+            "action": "transfer_admin",
+            "authorized": True,
+        },
+        expires_delta=timedelta(minutes=ADMIN_ACTION_TOKEN_MINUTES),
+    )
+
+    return success(
+        data={"action_token": action_token},
+        message="Password verificada.",
     )
 
 
