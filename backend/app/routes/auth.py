@@ -13,7 +13,12 @@ from flask_jwt_extended import (
     create_access_token,
 )
 
-from app.services import auth_service, mfa_service, session_service
+from app.services import (
+    admin_transfer_service,
+    auth_service,
+    mfa_service,
+    session_service,
+)
 from app.utils.cookie_helpers import (
     build_auth_response,
     clear_auth_cookies,
@@ -23,7 +28,6 @@ from app.utils.cookie_helpers import (
     build_refresh_csrf_token,
 )
 from app.utils.responses import success, error
-from app.models.user import User
 from app.extensions import db
 from app.extensions import limiter
 from app.constants import (
@@ -61,6 +65,20 @@ def _validate_refresh_csrf(refresh_token: str):
         return _refresh_csrf_error()
 
     return None
+
+
+def _get_user_id_from_claims(claims: dict) -> int | None:
+    try:
+        return int(claims["sub"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _get_user_id_from_identity() -> int | None:
+    try:
+        return int(get_jwt_identity())
+    except (TypeError, ValueError):
+        return None
 
 
 @auth_bp.route("/login", methods=["POST"])
@@ -112,7 +130,10 @@ def enroll_mfa_setup():
     if not decoded or not decoded.get("mfa_enrollment"):
         return error("Sessão de configuração MFA inválida ou expirada.", status=401)
 
-    user_id = int(decoded["sub"])
+    user_id = _get_user_id_from_claims(decoded)
+    if user_id is None:
+        return error("Sessão de configuração MFA inválida ou expirada.", status=401)
+
     ok, message, secret, otp_uri = mfa_service.setup_mfa(user_id)
 
     if not ok:
@@ -138,16 +159,36 @@ def enroll_mfa_confirm():
         return error("Body JSON inválido.", status=400)
 
     code = data.get("code", "").strip()
-    user_id = int(decoded["sub"])
+    user_id = _get_user_id_from_claims(decoded)
+    if user_id is None:
+        return error("Sessão de configuração MFA inválida ou expirada.", status=401)
 
     if not code:
         return error("Código TOTP obrigatório.", status=400)
 
-    ok, message = mfa_service.confirm_mfa_setup(user_id, code)
+    has_pending_transfer = admin_transfer_service.has_pending_for_target(user_id)
+
+    ok, message = mfa_service.confirm_mfa_setup(
+        user_id,
+        code,
+        commit=not has_pending_transfer,
+    )
     if not ok:
         return error(message, status=400)
 
-    user = db.session.get(User, user_id)
+    if has_pending_transfer and not admin_transfer_service.complete_pending_after_mfa(
+        user_id
+    ):
+        db.session.rollback()
+        return error(
+            "Não foi possível concluir a transferência de administração.",
+            status=400,
+        )
+
+    user = auth_service.get_active_completed_user(user_id)
+    if not user:
+        return error("Utilizador inválido.", status=401)
+
     ip = request.remote_addr
     user_agent = request.headers.get("User-Agent", "")
     refresh_token = session_service.create_session(user_id, ip, user_agent)
@@ -173,7 +214,9 @@ def verify_mfa():
         return error("Body JSON inválido.", status=400)
 
     code = data.get("code", "").strip()
-    user_id = int(decoded["sub"])
+    user_id = _get_user_id_from_claims(decoded)
+    if user_id is None:
+        return error("Sessão MFA inválida ou expirada.", status=401)
 
     if not code:
         return error("Código TOTP obrigatório.", status=400)
@@ -182,7 +225,9 @@ def verify_mfa():
     if not ok:
         return error(message, status=401)
 
-    user = db.session.get(User, user_id)
+    user = auth_service.get_active_completed_user(user_id)
+    if not user:
+        return error("Utilizador inválido.", status=401)
 
     ip = request.remote_addr
     user_agent = request.headers.get("User-Agent", "")
@@ -217,7 +262,10 @@ def refresh():
         resp = make_response(error(result, status=401))
         return clear_auth_cookies(resp)
 
-    user = db.session.get(User, user_id)
+    user = auth_service.get_active_completed_user(user_id)
+    if not user:
+        resp = make_response(error("Utilizador inválido.", status=401))
+        return clear_auth_cookies(resp)
 
     return build_auth_response(
         user=user,
@@ -340,9 +388,12 @@ def me():
     if claims.get("mfa_pending") or claims.get("mfa_enrollment"):
         return error("Sessão incompleta.", status=403)
 
-    user_id = int(get_jwt_identity())
-    user = db.session.get(User, user_id)
-    if not user or not user.is_active:
+    user_id = _get_user_id_from_identity()
+    if user_id is None:
+        return error("Utilizador inválido.", status=401)
+
+    user = auth_service.get_active_completed_user(user_id)
+    if not user:
         return error("Utilizador inválido.", status=401)
 
     return success(

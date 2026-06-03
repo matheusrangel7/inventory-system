@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from math import ceil
 from typing import Any
 
-from sqlalchemy import Float, String, and_, cast, func, or_, select
+from sqlalchemy import Float, String, and_, case, cast, func, or_, select
 
 from app.extensions import db
 from app.models.inventory import Asset, AssetSpec, Category, Feature
@@ -774,7 +774,18 @@ def _apply_spec_filter(query, raw_filter: dict):
         except ValueError:
             value_condition = False
         else:
-            numeric_content = cast(AssetSpec.content.astext, Float)
+            conditions.append(Feature.feature_type == "number")
+            conditions.append(func.jsonb_typeof(AssetSpec.content) == "number")
+            numeric_content = cast(
+                case(
+                    (
+                        func.jsonb_typeof(AssetSpec.content) == "number",
+                        cast(AssetSpec.content, String),
+                    ),
+                    else_=None,
+                ),
+                Float,
+            )
             if operator in {"gt", "greater_than"}:
                 value_condition = numeric_content > expected_number
             elif operator in {"gte", "greater_or_equal"}:

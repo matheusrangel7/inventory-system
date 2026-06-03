@@ -46,6 +46,7 @@ class Config:
     JWT_REFRESH_CSRF_COOKIE_NAME = "csrf_refresh_token"
     JWT_REFRESH_CSRF_COOKIE_PATH = "/"
     JWT_REFRESH_CSRF_HEADER_NAME = "X-CSRF-TOKEN"
+    REQUIRE_MUTATING_ORIGIN = env_bool("REQUIRE_MUTATING_ORIGIN", False)
 
     JWT_ACCESS_COOKIE_PATH = "/api/"
     JWT_REFRESH_COOKIE_PATH = "/api/auth/refresh"
@@ -76,6 +77,7 @@ class ProductionConfig(Config):
     DEBUG = False
     JWT_COOKIE_SECURE = env_bool("JWT_COOKIE_SECURE", True)
     JWT_COOKIE_CSRF_PROTECT = env_bool("JWT_COOKIE_CSRF_PROTECT", True)
+    REQUIRE_MUTATING_ORIGIN = env_bool("REQUIRE_MUTATING_ORIGIN", True)
 
 
 config_map = {
