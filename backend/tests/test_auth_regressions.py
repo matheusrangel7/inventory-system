@@ -5,6 +5,7 @@ from flask import Flask, g
 
 from app import _request_origin, _validate_security_config, create_app
 from app.config import ProductionConfig
+from app.domain.enums import UserRole
 from app.routes import auth
 
 
@@ -40,7 +41,7 @@ def test_enroll_mfa_confirm_completes_pending_admin_transfer(monkeypatch):
     user = SimpleNamespace(
         user_id=2,
         email="novo.admin@ubi.pt",
-        role="Administrador",
+        role=UserRole.ADMINISTRATOR,
     )
 
     monkeypatch.setattr(
@@ -160,7 +161,7 @@ def test_me_reuses_user_loaded_by_authentication_decorator(monkeypatch):
     user = SimpleNamespace(
         user_id=7,
         email="admin@ubi.pt",
-        role="Administrador",
+        role=UserRole.ADMINISTRATOR,
         mfa_enabled=True,
     )
     monkeypatch.setattr(
@@ -175,4 +176,4 @@ def test_me_reuses_user_loaded_by_authentication_decorator(monkeypatch):
 
     assert status == 200
     assert response.get_json()["data"]["user_id"] == 7
-    assert response.get_json()["data"]["role"] == "Administrador"
+    assert response.get_json()["data"]["role"] == UserRole.ADMINISTRATOR.value

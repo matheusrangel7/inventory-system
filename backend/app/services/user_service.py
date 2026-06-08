@@ -3,6 +3,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from app.domain.enums import RegistrationStatus, UserRole
 from app.extensions import db, ph
 from app.models.location import Location
 from app.models.user import User
@@ -71,7 +72,7 @@ def get_all_gestores() -> list[dict]:
     users = (
         db.session.execute(
             select(User)
-            .where(User.role == "Gestor", User.is_active == True)
+            .where(User.role == UserRole.MANAGER, User.is_active == True)
             .order_by(User.created_at.desc())
         )
         .scalars()
@@ -88,9 +89,9 @@ def get_pending_gestores() -> list[dict]:
     users = (
         db.session.execute(
             select(User).where(
-                User.role == "Gestor",
+                User.role == UserRole.MANAGER,
                 User.is_active == True,
-                User.registration_status == "Pendente",
+                User.registration_status == RegistrationStatus.PENDING,
             )
         )
         .scalars()
@@ -182,8 +183,8 @@ def create_pending_gestor(
     user = User(
         email=email,
         password_hash=ph.hash(random_password),
-        role="Gestor",
-        registration_status="Pendente",
+        role=UserRole.MANAGER,
+        registration_status=RegistrationStatus.PENDING,
     )
     del random_password
 
@@ -218,11 +219,14 @@ def _create_gestor_error_status(message: str) -> int:
 def _can_reactivate_inactive_gestor(user: User | None, allow_completed: bool) -> bool:
     if not user:
         return False
-    if user.is_active or user.role != "Gestor":
+    if user.is_active or user.role != UserRole.MANAGER:
         return False
-    if user.registration_status == "Pendente":
+    if user.registration_status == RegistrationStatus.PENDING:
         return True
-    return allow_completed and user.registration_status == "Concluído"
+    return (
+        allow_completed
+        and user.registration_status == RegistrationStatus.COMPLETED
+    )
 
 
 def _reset_completed_gestor_for_invite(user: User) -> None:
@@ -234,7 +238,10 @@ def _reset_completed_gestor_for_invite(user: User) -> None:
 
 
 def _is_completed_registration_email_change(user: User, email: str) -> bool:
-    return user.registration_status == "Concluído" and email != user.email
+    return (
+        user.registration_status == RegistrationStatus.COMPLETED
+        and email != user.email
+    )
 
 
 def reactivate_inactive_gestor_invite(
@@ -256,11 +263,11 @@ def reactivate_inactive_gestor_invite(
 
     old_value = _user_audit_dict(user)
 
-    if user.registration_status == "Concluído":
+    if user.registration_status == RegistrationStatus.COMPLETED:
         _reset_completed_gestor_for_invite(user)
 
     user.is_active = True
-    user.registration_status = "Pendente"
+    user.registration_status = RegistrationStatus.PENDING
     token = issue_registration_token(user)
     _assign_locations_to_user(user, locations)
 
@@ -342,7 +349,7 @@ def update_user(
     email = _clean_email(email)
     location_ids = location_ids or []
 
-    if user.role != "Gestor":
+    if user.role != UserRole.MANAGER:
         return (
             False,
             "Apenas gestores podem ser editados por esta rota.",
@@ -417,7 +424,7 @@ def delete_user(user_id: int, admin_id: int) -> tuple[bool, str, User | None]:
     if user.user_id == admin_id:
         return False, "Não pode remover a própria conta autenticada.", None
 
-    if user.role != "Gestor":
+    if user.role != UserRole.MANAGER:
         return False, "Apenas gestores podem ser removidos por esta rota.", None
 
     old_value = _user_audit_dict(user)
@@ -454,7 +461,7 @@ def resend_registration_email(user_id: int) -> tuple[bool, str]:
         return False, "Utilizador não encontrado."
     if not user.is_active:
         return False, "Conta desativada."
-    if user.registration_status == "Concluído":
+    if user.registration_status == RegistrationStatus.COMPLETED:
         return False, "O registo deste utilizador já foi concluído."
 
     token = issue_registration_token(user)

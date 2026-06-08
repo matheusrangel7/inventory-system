@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from app.domain.enums import AdminTransferStatus, RegistrationStatus, UserRole
 from app.extensions import db
 from app.models.admin_transfer import PendingAdminTransfer
 from app.models.location import Location
@@ -15,20 +16,17 @@ from app.services.registration_token_service import (
 )
 from app.utils.audit import log_action
 
-PENDING_TRANSFER_STATUS = "Pendente"
-CANCELLED_TRANSFER_STATUS = "Cancelada"
-EXPIRED_TRANSFER_STATUS = "Expirada"
-COMPLETED_TRANSFER_STATUS = "Concluída"
-
-
 def _pending_transfer_stmt(*, for_update: bool = False):
     statement = select(PendingAdminTransfer).where(
-        PendingAdminTransfer.status == PENDING_TRANSFER_STATUS
+        PendingAdminTransfer.status == AdminTransferStatus.PENDING
     )
     return statement.with_for_update() if for_update else statement
 
 
-def _resolve_transfer(transfer: PendingAdminTransfer, status: str) -> None:
+def _resolve_transfer(
+    transfer: PendingAdminTransfer,
+    status: AdminTransferStatus,
+) -> None:
     transfer.status = status
     transfer.resolved_at = datetime.now(timezone.utc)
 
@@ -60,7 +58,7 @@ def get_pending_transfer() -> dict | None:
         return None
 
     if (
-        target.registration_status == "Pendente"
+        target.registration_status == RegistrationStatus.PENDING
         and is_registration_token_expired(target)
     ):
         return None
@@ -84,8 +82,8 @@ def get_eligible_managers(current_admin_id: int) -> list[dict]:
         db.session.execute(
             select(User)
             .where(
-                User.role == "Gestor",
-                User.registration_status == "Concluído",
+                User.role == UserRole.MANAGER,
+                User.registration_status == RegistrationStatus.COMPLETED,
                 User.is_active == True,
                 User.mfa_enabled == True,
                 User.user_id != current_admin_id,
@@ -114,7 +112,7 @@ def has_pending_for_target(target_user_id: int) -> bool:
         db.session.execute(
             select(PendingAdminTransfer.transfer_id).where(
                 PendingAdminTransfer.target_user_id == target_user_id,
-                PendingAdminTransfer.status == PENDING_TRANSFER_STATUS,
+                PendingAdminTransfer.status == AdminTransferStatus.PENDING,
             )
         ).scalar_one_or_none()
         is not None
@@ -164,15 +162,19 @@ def transfer_to_existing_admin(
         select(User).where(User.user_id == target_user_id).with_for_update()
     ).scalar_one_or_none()
 
-    if not current or not current.is_active or current.role != "Administrador":
+    if (
+        not current
+        or not current.is_active
+        or current.role != UserRole.ADMINISTRATOR
+    ):
         return False, "Administrador atual inválido."
     if not target or not target.is_active:
         return False, "Utilizador alvo inválido."
     if target.user_id == current.user_id:
         return False, "Não pode transferir a administração para si próprio."
-    if target.role != "Gestor":
+    if target.role != UserRole.MANAGER:
         return False, "O utilizador selecionado não é um Gestor."
-    if target.registration_status != "Concluído":
+    if target.registration_status != RegistrationStatus.COMPLETED:
         return False, "O utilizador ainda não concluiu o registo."
     if not target.mfa_enabled:
         return False, "O utilizador precisa ter MFA configurado."
@@ -182,7 +184,7 @@ def transfer_to_existing_admin(
 
     current_old = {"role": current.role}
     target_old = {"role": target.role}
-    current.role = "Gestor"
+    current.role = UserRole.MANAGER
     log_action(
         "UPDATE",
         "users",
@@ -198,7 +200,7 @@ def transfer_to_existing_admin(
         db.session.rollback()
         return False, "Não foi possível libertar a função de administrador atual."
 
-    target.role = "Administrador"
+    target.role = UserRole.ADMINISTRATOR
     log_action(
         "UPDATE",
         "users",
@@ -239,7 +241,11 @@ def start_transfer_to_new_admin(
         .where(User.user_id == current_admin_id)
         .with_for_update()
     ).scalar_one_or_none()
-    if not current or current.role != "Administrador" or not current.is_active:
+    if (
+        not current
+        or current.role != UserRole.ADMINISTRATOR
+        or not current.is_active
+    ):
         return False, "Administrador atual inválido.", None
 
     existing = db.session.execute(
@@ -267,7 +273,7 @@ def start_transfer_to_new_admin(
     transfer = PendingAdminTransfer(
         initiated_by=current_admin_id,
         target_user_id=target.user_id,
-        status=PENDING_TRANSFER_STATUS,
+        status=AdminTransferStatus.PENDING,
     )
     db.session.add(transfer)
     try:
@@ -313,7 +319,11 @@ def resend_pending_transfer_email(current_admin_id: int) -> tuple[bool, str]:
         return False, "Transferência pendente pertence a outro administrador."
 
     target = db.session.get(User, transfer.target_user_id)
-    if not target or not target.is_active or target.registration_status == "Concluído":
+    if (
+        not target
+        or not target.is_active
+        or target.registration_status == RegistrationStatus.COMPLETED
+    ):
         return False, "Utilizador alvo inválido."
 
     token = issue_registration_token(target)
@@ -342,7 +352,7 @@ def cancel_pending_transfer(current_admin_id: int) -> tuple[bool, str]:
         target.is_active = False
         clear_registration_token(target)
 
-    _resolve_transfer(transfer, CANCELLED_TRANSFER_STATUS)
+    _resolve_transfer(transfer, AdminTransferStatus.CANCELLED)
     log_action(
         action="UPDATE",
         table_name="pending_admin_transfer",
@@ -360,7 +370,7 @@ def expire_pending_for_target(target_user_id: int) -> bool:
         select(PendingAdminTransfer)
         .where(
             PendingAdminTransfer.target_user_id == target_user_id,
-            PendingAdminTransfer.status == PENDING_TRANSFER_STATUS,
+            PendingAdminTransfer.status == AdminTransferStatus.PENDING,
         )
         .with_for_update()
     ).scalar_one_or_none()
@@ -368,7 +378,7 @@ def expire_pending_for_target(target_user_id: int) -> bool:
         return False
 
     target = db.session.get(User, target_user_id)
-    if target and target.registration_status == "Concluído":
+    if target and target.registration_status == RegistrationStatus.COMPLETED:
         return False
     if target and not is_registration_token_expired(target):
         return False
@@ -382,7 +392,7 @@ def expire_pending_for_target(target_user_id: int) -> bool:
         target.is_active = False
         clear_registration_token(target)
 
-    _resolve_transfer(transfer, EXPIRED_TRANSFER_STATUS)
+    _resolve_transfer(transfer, AdminTransferStatus.EXPIRED)
     log_action(
         action="UPDATE",
         table_name="pending_admin_transfer",
@@ -400,7 +410,7 @@ def complete_pending_after_mfa(target_user_id: int) -> bool:
         select(PendingAdminTransfer)
         .where(
             PendingAdminTransfer.target_user_id == target_user_id,
-            PendingAdminTransfer.status == PENDING_TRANSFER_STATUS,
+            PendingAdminTransfer.status == AdminTransferStatus.PENDING,
         )
         .with_for_update()
     ).scalar_one_or_none()
@@ -420,11 +430,14 @@ def complete_pending_after_mfa(target_user_id: int) -> bool:
 
     if not old_admin or not new_admin:
         return False
-    if not old_admin.is_active or old_admin.role != "Administrador":
+    if not old_admin.is_active or old_admin.role != UserRole.ADMINISTRATOR:
         return False
-    if not new_admin.is_active or new_admin.registration_status != "Concluído":
+    if (
+        not new_admin.is_active
+        or new_admin.registration_status != RegistrationStatus.COMPLETED
+    ):
         return False
-    if new_admin.role != "Gestor" or not new_admin.mfa_enabled:
+    if new_admin.role != UserRole.MANAGER or not new_admin.mfa_enabled:
         return False
 
     _remove_locations_from_user(old_admin.user_id, old_admin.user_id)
@@ -434,14 +447,14 @@ def complete_pending_after_mfa(target_user_id: int) -> bool:
         "registration_status": new_admin.registration_status,
     }
 
-    old_admin.role = "Gestor"
+    old_admin.role = UserRole.MANAGER
     log_action(
         action="UPDATE",
         table_name="users",
         record_id=old_admin.user_id,
         user_id=old_admin.user_id,
         old_value=old_admin_old_value,
-        new_value={"role": "Gestor"},
+        new_value={"role": UserRole.MANAGER},
     )
     try:
         db.session.flush()
@@ -449,9 +462,9 @@ def complete_pending_after_mfa(target_user_id: int) -> bool:
         db.session.rollback()
         return False
 
-    new_admin.role = "Administrador"
-    new_admin.registration_status = "Concluído"
-    _resolve_transfer(transfer, COMPLETED_TRANSFER_STATUS)
+    new_admin.role = UserRole.ADMINISTRATOR
+    new_admin.registration_status = RegistrationStatus.COMPLETED
+    _resolve_transfer(transfer, AdminTransferStatus.COMPLETED)
 
     log_action(
         action="UPDATE",
@@ -459,7 +472,10 @@ def complete_pending_after_mfa(target_user_id: int) -> bool:
         record_id=new_admin.user_id,
         user_id=old_admin.user_id,
         old_value=new_admin_old_value,
-        new_value={"role": "Administrador", "registration_status": "Concluído"},
+        new_value={
+            "role": UserRole.ADMINISTRATOR,
+            "registration_status": RegistrationStatus.COMPLETED,
+        },
     )
     log_action(
         action="UPDATE",
@@ -469,7 +485,7 @@ def complete_pending_after_mfa(target_user_id: int) -> bool:
         old_value={
             "initiated_by": transfer.initiated_by,
             "target_user_id": transfer.target_user_id,
-            "status": PENDING_TRANSFER_STATUS,
+            "status": AdminTransferStatus.PENDING,
         },
         new_value=_resolved_transfer_value(transfer, "completed"),
     )

@@ -3,6 +3,7 @@ from functools import wraps
 from flask import g, jsonify
 from flask_jwt_extended import get_jwt, get_jwt_identity, verify_jwt_in_request
 
+from app.domain.enums import RegistrationStatus
 from app.extensions import db
 from app.models.user import User
 from app.security.permissions import Permission, has_permission
@@ -34,7 +35,7 @@ def _load_current_user():
     if not user or not user.is_active:
         return None, jsonify({"success": False, "error": "Utilizador inválido."}), 401
 
-    if user.registration_status != "Concluído":
+    if user.registration_status != RegistrationStatus.COMPLETED:
         return None, jsonify({"success": False, "error": "Registo incompleto."}), 403
 
     g.current_user = user

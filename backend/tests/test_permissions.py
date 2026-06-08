@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import app as app_package
 from flask import Flask
 
+from app.domain.enums import RegistrationStatus, UserRole
 from app.routes import admin_transfer, assets, categories, logs, locations, users
 from app.security.permissions import Permission, has_permission, permissions_for_role
 from app.services import location_service
@@ -10,11 +11,11 @@ from app.utils import decorators
 
 
 def test_administrador_has_every_permission():
-    assert permissions_for_role("Administrador") == frozenset(Permission)
+    assert permissions_for_role(UserRole.ADMINISTRATOR) == frozenset(Permission)
 
 
 def test_gestor_has_only_operational_permissions():
-    assert permissions_for_role("Gestor") == {
+    assert permissions_for_role(UserRole.MANAGER) == {
         Permission.ASSETS_READ,
         Permission.ASSETS_CREATE,
         Permission.ASSETS_UPDATE,
@@ -30,7 +31,7 @@ def test_unknown_role_has_no_permissions():
 
 
 def test_administrator_cannot_be_assigned_as_location_manager(monkeypatch):
-    admin = SimpleNamespace(role="Administrador")
+    admin = SimpleNamespace(role=UserRole.ADMINISTRATOR)
     result = SimpleNamespace(scalar_one_or_none=lambda: admin)
     fake_db = SimpleNamespace(
         session=SimpleNamespace(execute=lambda statement: result)
@@ -48,7 +49,7 @@ def test_permission_required_allows_authorized_role(monkeypatch):
     monkeypatch.setattr(
         decorators,
         "_load_current_user",
-        lambda: (SimpleNamespace(role="Gestor"), None, None),
+        lambda: (SimpleNamespace(role=UserRole.MANAGER), None, None),
     )
 
     @decorators.permission_required(Permission.ASSETS_CREATE)
@@ -63,7 +64,7 @@ def test_permission_required_blocks_missing_permission(monkeypatch):
     monkeypatch.setattr(
         decorators,
         "_load_current_user",
-        lambda: (SimpleNamespace(role="Gestor"), None, None),
+        lambda: (SimpleNamespace(role=UserRole.MANAGER), None, None),
     )
 
     @decorators.permission_required(Permission.USERS_READ)
@@ -98,9 +99,9 @@ def test_database_role_wins_over_forged_jwt_role(monkeypatch):
     app = Flask(__name__)
     database_user = SimpleNamespace(
         user_id=7,
-        role="Gestor",
+        role=UserRole.MANAGER,
         is_active=True,
-        registration_status="Concluído",
+        registration_status=RegistrationStatus.COMPLETED,
     )
     monkeypatch.setattr(decorators, "verify_jwt_in_request", lambda: None)
     monkeypatch.setattr(

@@ -4,6 +4,7 @@ from typing import Any
 
 from sqlalchemy import func, select
 
+from app.domain.enums import UserRole
 from app.extensions import db
 from app.models.inventory import Asset
 from app.models.location import Location
@@ -80,7 +81,7 @@ def _validate_manager(manager_id: Any) -> tuple[bool, str, int | None]:
     ).scalar_one_or_none()
     if not manager:
         return False, "Gestor não encontrado ou inativo.", None
-    if manager.role != "Gestor":
+    if manager.role != UserRole.MANAGER:
         return False, "Utilizador inválido para gestor responsável.", None
     return True, "Gestor válido.", parsed
 

@@ -4,6 +4,7 @@ from datetime import date
 from dateutil.relativedelta import relativedelta
 from sqlalchemy import select
 
+from app.domain.enums import UserRole
 from app.extensions import db
 from app.models.inventory import Asset
 from app.models.location import Location
@@ -94,7 +95,7 @@ def _get_recipient_email(location_id: int) -> str | None:
         
     admin = db.session.execute(
         select(User).where(
-            User.role == "Administrador",
+            User.role == UserRole.ADMINISTRATOR,
             User.is_active == True,
         ).limit(1)
     ).scalar_one_or_none()

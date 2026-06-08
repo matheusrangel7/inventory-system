@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+from app.domain.enums import AdminTransferStatus, RegistrationStatus, UserRole
 from app.services import admin_transfer_service
 
 
@@ -48,7 +49,7 @@ def make_transfer():
         transfer_id=10,
         initiated_by=1,
         target_user_id=2,
-        status=admin_transfer_service.PENDING_TRANSFER_STATUS,
+        status=AdminTransferStatus.PENDING,
         resolved_at=None,
     )
 
@@ -69,7 +70,7 @@ def test_cancel_pending_transfer_marks_transfer_cancelled(monkeypatch):
     ok, _ = admin_transfer_service.cancel_pending_transfer(current_admin_id=1)
 
     assert ok
-    assert transfer.status == admin_transfer_service.CANCELLED_TRANSFER_STATUS
+    assert transfer.status == AdminTransferStatus.CANCELLED
     assert transfer.resolved_at is not None
     assert target.is_active is False
     assert session.committed
@@ -77,7 +78,10 @@ def test_cancel_pending_transfer_marks_transfer_cancelled(monkeypatch):
 
 def test_expire_pending_transfer_marks_transfer_expired(monkeypatch):
     transfer = make_transfer()
-    target = SimpleNamespace(registration_status="Pendente", is_active=True)
+    target = SimpleNamespace(
+        registration_status=RegistrationStatus.PENDING,
+        is_active=True,
+    )
     session = FakeSession([transfer], users={2: target})
 
     monkeypatch.setattr(admin_transfer_service, "db", SimpleNamespace(session=session))
@@ -94,7 +98,7 @@ def test_expire_pending_transfer_marks_transfer_expired(monkeypatch):
     monkeypatch.setattr(admin_transfer_service, "log_action", lambda **kwargs: None)
 
     assert admin_transfer_service.expire_pending_for_target(target_user_id=2)
-    assert transfer.status == admin_transfer_service.EXPIRED_TRANSFER_STATUS
+    assert transfer.status == AdminTransferStatus.EXPIRED
     assert transfer.resolved_at is not None
     assert target.is_active is False
     assert session.committed
@@ -106,14 +110,14 @@ def test_complete_pending_transfer_marks_transfer_completed(monkeypatch):
         user_id=1,
         email="old.admin@ubi.pt",
         is_active=True,
-        role="Administrador",
+        role=UserRole.ADMINISTRATOR,
     )
     new_admin = SimpleNamespace(
         user_id=2,
         email="new.admin@ubi.pt",
         is_active=True,
-        role="Gestor",
-        registration_status="Concluído",
+        role=UserRole.MANAGER,
+        registration_status=RegistrationStatus.COMPLETED,
         mfa_enabled=True,
     )
     session = FakeSession([transfer, old_admin, new_admin])
@@ -142,10 +146,10 @@ def test_complete_pending_transfer_marks_transfer_completed(monkeypatch):
     )
 
     assert admin_transfer_service.complete_pending_after_mfa(target_user_id=2)
-    assert transfer.status == admin_transfer_service.COMPLETED_TRANSFER_STATUS
+    assert transfer.status == AdminTransferStatus.COMPLETED
     assert transfer.resolved_at is not None
-    assert old_admin.role == "Gestor"
-    assert new_admin.role == "Administrador"
+    assert old_admin.role == UserRole.MANAGER
+    assert new_admin.role == UserRole.ADMINISTRATOR
     assert session.committed
 
 
@@ -155,7 +159,7 @@ def test_reading_expired_transfer_does_not_mutate_state(monkeypatch):
     target = SimpleNamespace(
         user_id=2,
         email="pending.admin@ubi.pt",
-        registration_status="Pendente",
+        registration_status=RegistrationStatus.PENDING,
         registration_token_expires_at=None,
     )
     session = FakeSession([transfer], users={2: target})
@@ -168,7 +172,7 @@ def test_reading_expired_transfer_does_not_mutate_state(monkeypatch):
     )
 
     assert admin_transfer_service.get_pending_transfer() is None
-    assert transfer.status == admin_transfer_service.PENDING_TRANSFER_STATUS
+    assert transfer.status == AdminTransferStatus.PENDING
     assert not session.committed
 
 

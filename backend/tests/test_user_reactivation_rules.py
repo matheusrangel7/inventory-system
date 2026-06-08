@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 from flask import Flask
 
+from app.domain.enums import RegistrationStatus, UserRole
 from app.routes import users
 from app.services import user_service
 
@@ -38,8 +39,8 @@ class FakeSession:
 def make_user(
     *,
     is_active=False,
-    role="Gestor",
-    registration_status="Pendente",
+    role=UserRole.MANAGER,
+    registration_status=RegistrationStatus.PENDING,
     mfa_enabled=False,
 ):
     return SimpleNamespace(
@@ -62,7 +63,10 @@ def test_pending_inactive_gestor_can_be_reactivated():
 
 
 def test_completed_inactive_gestor_requires_explicit_allow_completed():
-    user = make_user(registration_status="Concluído", mfa_enabled=True)
+    user = make_user(
+        registration_status=RegistrationStatus.COMPLETED,
+        mfa_enabled=True,
+    )
 
     assert not user_service._can_reactivate_inactive_gestor(
         user, allow_completed=False
@@ -79,7 +83,7 @@ def test_active_user_with_same_email_is_not_reactivated():
 
 
 def test_non_gestor_user_is_not_reactivated():
-    user = make_user(role="Administrador")
+    user = make_user(role=UserRole.ADMINISTRATOR)
 
     assert not user_service._can_reactivate_inactive_gestor(
         user, allow_completed=True
@@ -87,7 +91,10 @@ def test_non_gestor_user_is_not_reactivated():
 
 
 def test_completed_gestor_reset_clears_old_credentials(monkeypatch):
-    user = make_user(registration_status="Concluído", mfa_enabled=True)
+    user = make_user(
+        registration_status=RegistrationStatus.COMPLETED,
+        mfa_enabled=True,
+    )
 
     class DummyPasswordHasher:
         @staticmethod
@@ -105,7 +112,7 @@ def test_completed_gestor_reset_clears_old_credentials(monkeypatch):
 
 
 def test_completed_registration_email_change_is_blocked():
-    user = make_user(registration_status="Concluído")
+    user = make_user(registration_status=RegistrationStatus.COMPLETED)
 
     assert user_service._is_completed_registration_email_change(
         user, "novo.gestor@ubi.pt"
@@ -115,7 +122,10 @@ def test_completed_registration_email_change_is_blocked():
     )
 
 
-@pytest.mark.parametrize("role", ["Gestor", "Administrador", None])
+@pytest.mark.parametrize(
+    "role",
+    [UserRole.MANAGER, UserRole.ADMINISTRATOR, None],
+)
 def test_create_user_route_rejects_role_field(monkeypatch, role):
     app = Flask(__name__)
     monkeypatch.setattr(
@@ -137,7 +147,10 @@ def test_create_user_route_rejects_role_field(monkeypatch, role):
     )
 
 
-@pytest.mark.parametrize("role", ["Gestor", "Administrador", None])
+@pytest.mark.parametrize(
+    "role",
+    [UserRole.MANAGER, UserRole.ADMINISTRATOR, None],
+)
 def test_update_user_route_rejects_role_field(monkeypatch, role):
     app = Flask(__name__)
     monkeypatch.setattr(
@@ -193,7 +206,7 @@ def test_create_user_route_accepts_payload_without_role(monkeypatch):
         "location_ids": [1],
         "admin_id": 1,
     }
-    assert response.get_json()["data"]["role"] == "Gestor"
+    assert response.get_json()["data"]["role"] == UserRole.MANAGER.value
 
 
 def test_update_user_route_accepts_payload_without_role(monkeypatch):
@@ -227,7 +240,7 @@ def test_update_user_route_accepts_payload_without_role(monkeypatch):
         "location_ids": [1],
         "admin_id": 1,
     }
-    assert response.get_json()["data"]["role"] == "Gestor"
+    assert response.get_json()["data"]["role"] == UserRole.MANAGER.value
 
 
 def test_create_pending_gestor_always_sets_gestor_role(monkeypatch):
@@ -263,7 +276,7 @@ def test_create_pending_gestor_always_sets_gestor_role(monkeypatch):
     )
 
     assert ok
-    assert user.role == "Gestor"
+    assert user.role == UserRole.MANAGER
     assert token == "registration-token"
 
 
@@ -291,12 +304,15 @@ def test_update_user_preserves_gestor_role(monkeypatch):
     )
 
     assert ok
-    assert updated_user.role == "Gestor"
+    assert updated_user.role == UserRole.MANAGER
     assert session.committed
 
 
 def test_pending_gestor_email_change_reissues_registration_token(monkeypatch):
-    user = make_user(is_active=True, registration_status="Pendente")
+    user = make_user(
+        is_active=True,
+        registration_status=RegistrationStatus.PENDING,
+    )
     session = FakeSession([user, None])
     issued_for = []
     emails_sent = []
@@ -347,7 +363,7 @@ def test_pending_gestor_email_change_reissues_registration_token(monkeypatch):
 
 
 def test_update_user_rejects_administrator(monkeypatch):
-    admin = make_user(is_active=True, role="Administrador")
+    admin = make_user(is_active=True, role=UserRole.ADMINISTRATOR)
     session = FakeSession([admin])
     monkeypatch.setattr(user_service, "db", SimpleNamespace(session=session))
 
@@ -365,7 +381,7 @@ def test_update_user_rejects_administrator(monkeypatch):
 
 
 def test_delete_user_rejects_administrator(monkeypatch):
-    admin = make_user(is_active=True, role="Administrador")
+    admin = make_user(is_active=True, role=UserRole.ADMINISTRATOR)
     session = FakeSession([admin])
     monkeypatch.setattr(user_service, "db", SimpleNamespace(session=session))
 
