@@ -77,8 +77,8 @@ const FEATURE_TYPE_LABELS = {
 const REPEATABLE_FEATURE_SUFFIX = "[]";
 
 const filterGroups = {
-    dashboardUsers: ["dash-users-search", "dash-users-role", "dash-users-status", "dash-users-sort"],
-    users: ["users-search", "users-role", "users-status", "users-sort"],
+    dashboardUsers: ["dash-users-search", "dash-users-status", "dash-users-sort"],
+    users: ["users-search", "users-status", "users-sort"],
     locations: ["locations-search", "locations-sort"],
     assets: ["assets-search", "assets-category", "assets-location", "assets-status", "assets-assignment", "assets-sort"],
     categories: ["categories-search", "categories-sort"],
@@ -93,7 +93,6 @@ const cleanSearchConfigs = {
         defaults: { "dash-users-sort": "id-desc" },
         filters: [
             { id: "dash-users-search", label: "Pesquisa", primary: true },
-            { id: "dash-users-role", label: "Cargo" },
             { id: "dash-users-status", label: "Registo" },
             { id: "dash-users-sort", label: "Ordem", defaultValue: "id-desc" }
         ]
@@ -105,7 +104,6 @@ const cleanSearchConfigs = {
         defaults: { "users-sort": "email-asc" },
         filters: [
             { id: "users-search", label: "Pesquisa", primary: true },
-            { id: "users-role", label: "Cargo" },
             { id: "users-status", label: "Registo" },
             { id: "users-sort", label: "Ordem", defaultValue: "email-asc" }
         ]
@@ -535,10 +533,8 @@ function iniciarObservadorTailwindDashboard() {
 }
 
 function popularOpcoesDosFiltros() {
-    popularSelect("dash-users-role", valoresUnicos(cacheUtilizadores.map(getUserRole)), "Todos");
     popularSelect("dash-users-status", valoresUnicos(cacheUtilizadores.map(getUserStatus)), "Todos");
 
-    popularSelect("users-role", valoresUnicos(cacheUtilizadores.map(getUserRole)), "Todos");
     popularSelect("users-status", valoresUnicos(cacheUtilizadores.map(getUserStatus)), "Todos");
 
 
@@ -1836,28 +1832,23 @@ function mudarPaginaTabela(grupo, direction) {
 function filtrarUtilizadores(prefixo) {
     let users = [...cacheUtilizadores];
     const termo = getInputValue(`${prefixo}-search`);
-    const cargo = getInputValue(`${prefixo}-role`);
     const estado = getInputValue(`${prefixo}-status`);
 
     users = users.filter(u => {
         const matchesSearch = textoIncluiTermo([
             getUserId(u),
             getUserEmail(u),
-            getUserRole(u),
             getUserStatus(u)
         ], termo);
 
-        const matchesRole = !cargo || normalizarTexto(getUserRole(u)) === normalizarTexto(cargo);
         const matchesStatus = !estado || normalizarTexto(getUserStatus(u)) === normalizarTexto(estado);
 
-        return matchesSearch && matchesRole && matchesStatus;
+        return matchesSearch && matchesStatus;
     });
 
     return ordenarRegistos(users, getInputValue(`${prefixo}-sort`), {
         "email-asc": { accessor: getUserEmail, dir: 1, type: "text" },
         "email-desc": { accessor: getUserEmail, dir: -1, type: "text" },
-        "role-asc": { accessor: getUserRole, dir: 1, type: "text" },
-        "role-desc": { accessor: getUserRole, dir: -1, type: "text" },
         "id-asc": { accessor: getUserId, dir: 1, type: "text" },
         "id-desc": { accessor: getUserId, dir: -1, type: "text" }
     });
@@ -2997,7 +2988,7 @@ function recolherFeaturesCategoria() {
 }
 
 function atualizarSelectsDosModais() {
-    preencherSelectModal("new-location-manager", cacheUtilizadores, getUserId, user => `${getUserEmail(user)} (${getUserRole(user)})`, "Sem gestor associado");
+    preencherSelectModal("new-location-manager", cacheUtilizadores, getUserId, getUserEmail, "Sem gestor associado");
     preencherSelectModal("new-asset-location", cacheLocais, getLocationId, getLocationName, "Selecionar local");
     preencherSelectModal("new-asset-category", cacheCategorias, getCategoryId, getCategoryName, "Selecionar categoria");
 }

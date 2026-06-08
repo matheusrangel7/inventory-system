@@ -5,6 +5,7 @@ from flask_jwt_extended import get_jwt, get_jwt_identity, verify_jwt_in_request
 
 from app.extensions import db
 from app.models.user import User
+from app.security.permissions import Permission, has_permission
 
 
 def _get_identity_user_id() -> int | None:
@@ -18,6 +19,9 @@ def _load_current_user():
     verify_jwt_in_request()
 
     claims = get_jwt()
+    if claims.get("token_use") != "access":
+        return None, jsonify({"success": False, "error": "Token inválido."}), 401
+
     if claims.get("mfa_pending") or claims.get("mfa_enrollment"):
         return None, jsonify({"success": False, "error": "Sessão incompleta."}), 403
 
@@ -37,39 +41,38 @@ def _load_current_user():
     return user, None, None
 
 
-def admin_required(fn):
+def authenticated_user_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        user, response, status = _load_current_user()
+        _, response, status = _load_current_user()
         if response:
             return response, status
-
-        if user.role != "Administrador":
-            return (
-                jsonify(
-                    {"success": False, "error": "Acesso restrito a administradores."}
-                ),
-                403,
-            )
 
         return fn(*args, **kwargs)
 
     return wrapper
 
 
-def manager_required(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        user, response, status = _load_current_user()
-        if response:
-            return response, status
+def permission_required(permission: Permission):
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            user, response, status = _load_current_user()
+            if response:
+                return response, status
 
-        if user.role not in ("Gestor", "Administrador"):
-            return jsonify({"success": False, "error": "Acesso não autorizado."}), 403
+            if not has_permission(user.role, permission):
+                return (
+                    jsonify({"success": False, "error": "Acesso não autorizado."}),
+                    403,
+                )
 
-        return fn(*args, **kwargs)
+            return fn(*args, **kwargs)
 
-    return wrapper
+        wrapper.required_permission = permission
+        return wrapper
+
+    return decorator
 
 
 def get_current_user_id() -> int:
@@ -81,7 +84,7 @@ def get_current_user_id() -> int:
     return user_id
 
 
-def get_current_role() -> str:
+def get_current_role() -> str | None:
     if hasattr(g, "current_user"):
         return g.current_user.role
 

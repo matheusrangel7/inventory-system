@@ -13,8 +13,6 @@ from app.services.registration_token_service import (
 )
 from app.utils.audit import log_action
 
-VALID_ROLES = {"Gestor", "Administrador"}
-
 
 def _clean_email(email: Any) -> str:
     return str(email or "").strip().lower()
@@ -154,9 +152,8 @@ def _assign_locations_to_user(user: User, locations: list[Location]) -> None:
         location.location_manager_id = user.user_id
 
 
-def create_pending_user(
+def create_pending_gestor(
     email: str,
-    role: str,
     location_ids: list[int],
     actor_id: int,
     require_locations: bool = True,
@@ -167,10 +164,7 @@ def create_pending_user(
     if not email:
         return False, "Email é obrigatório.", None, None
 
-    if role not in VALID_ROLES:
-        return False, "Role inválida.", None, None
-
-    if require_locations and role == "Gestor" and not location_ids:
+    if require_locations and not location_ids:
         return False, "É necessário atribuir pelo menos uma sala ao gestor.", None, None
 
     existing = db.session.execute(
@@ -188,7 +182,7 @@ def create_pending_user(
     user = User(
         email=email,
         password_hash=ph.hash(random_password),
-        role=role,
+        role="Gestor",
         registration_status="Pendente",
     )
     del random_password
@@ -290,9 +284,8 @@ def reactivate_inactive_gestor_invite(
 def create_gestor(
     email: str, location_ids: list[int], admin_id: int
 ) -> tuple[bool, str, User | None, int]:
-    ok, message, user, token = create_pending_user(
+    ok, message, user, token = create_pending_gestor(
         email=email,
-        role="Gestor",
         location_ids=location_ids,
         actor_id=admin_id,
     )
@@ -337,7 +330,6 @@ def create_gestor(
 def update_user(
     user_id: int,
     email: str,
-    role: str | None,
     location_ids: list[int],
     admin_id: int,
 ) -> tuple[bool, str, User | None]:
@@ -348,20 +340,12 @@ def update_user(
         return False, "Utilizador não encontrado.", None
 
     email = _clean_email(email)
-    role = role if role in VALID_ROLES else user.role
     location_ids = location_ids or []
 
-    if user.role == "Administrador" and role != "Administrador":
+    if user.role != "Gestor":
         return (
             False,
-            "A função de Administrador só pode ser transferida pelo fluxo de transferência.",
-            None,
-        )
-
-    if role == "Administrador" and user.role != "Administrador":
-        return (
-            False,
-            "Administradores só podem ser definidos pelo fluxo de transferência.",
+            "Apenas gestores podem ser editados por esta rota.",
             None,
         )
 
@@ -388,7 +372,6 @@ def update_user(
 
     old_value = _user_audit_dict(user)
     user.email = email
-    user.role = role
     _assign_locations_to_user(user, locations)
     token = issue_registration_token(user) if email_changed else None
 
@@ -434,6 +417,9 @@ def delete_user(user_id: int, admin_id: int) -> tuple[bool, str, User | None]:
     if user.user_id == admin_id:
         return False, "Não pode remover a própria conta autenticada.", None
 
+    if user.role != "Gestor":
+        return False, "Apenas gestores podem ser removidos por esta rota.", None
+
     old_value = _user_audit_dict(user)
     user.is_active = False
     clear_registration_token(user)
@@ -457,6 +443,7 @@ def delete_user(user_id: int, admin_id: int) -> tuple[bool, str, User | None]:
         new_value={**old_value, "is_active": False},
     )
     db.session.commit()
+    session_service.revoke_all_sessions(user.user_id)
     return True, "Utilizador removido com sucesso.", user
 
 

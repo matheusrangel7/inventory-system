@@ -1,17 +1,9 @@
 import io
 import base64
 import hmac
-from datetime import timedelta
-
 import qrcode
 
-from flask import Blueprint, request, make_response, current_app
-from flask_jwt_extended import (
-    jwt_required,
-    get_jwt,
-    get_jwt_identity,
-    create_access_token,
-)
+from flask import Blueprint, current_app, g, make_response, request
 
 from app.services import (
     admin_transfer_service,
@@ -32,10 +24,12 @@ from app.extensions import db
 from app.extensions import limiter
 from app.constants import (
     CSRF_HEADER_NAME,
+    LOGIN_RATE_LIMIT,
     REFRESH_CSRF_COOKIE_NAME,
     REFRESH_TOKEN_COOKIE_NAME,
-    ADMIN_ACTION_TOKEN_MINUTES,
 )
+from app.security.permissions import permissions_for_role
+from app.utils.decorators import authenticated_user_required
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
@@ -74,15 +68,8 @@ def _get_user_id_from_claims(claims: dict) -> int | None:
         return None
 
 
-def _get_user_id_from_identity() -> int | None:
-    try:
-        return int(get_jwt_identity())
-    except (TypeError, ValueError):
-        return None
-
-
 @auth_bp.route("/login", methods=["POST"])
-@limiter.limit("5 per minute")
+@limiter.limit(LOGIN_RATE_LIMIT)
 def login():
     data = request.get_json(silent=True)
 
@@ -274,46 +261,6 @@ def refresh():
     )
 
 
-@auth_bp.route("/verify-password", methods=["POST"])
-@jwt_required()
-@limiter.limit("5 per minute")
-def verify_password():
-    claims = get_jwt()
-    if claims.get("mfa_pending") or claims.get("mfa_enrollment"):
-        return error("Sessão incompleta.", status=403)
-
-    data = request.get_json(silent=True)
-    if not data:
-        return error("Body JSON inválido ou ausente.", status=400)
-
-    password = data.get("password", "")
-    if not password:
-        return error("Password obrigatória.", status=400)
-
-    try:
-        user_id = int(get_jwt_identity())
-    except (TypeError, ValueError):
-        return error("Utilizador inválido.", status=401)
-
-    ok, message = auth_service.verify_password(user_id, password)
-    if not ok:
-        return error(message, status=401)
-
-    action_token = create_access_token(
-        identity=str(user_id),
-        additional_claims={
-            "action": "transfer_admin",
-            "authorized": True,
-        },
-        expires_delta=timedelta(minutes=ADMIN_ACTION_TOKEN_MINUTES),
-    )
-
-    return success(
-        data={"action_token": action_token},
-        message="Password verificada.",
-    )
-
-
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
     refresh_token = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
@@ -382,19 +329,9 @@ def complete_registration():
 
 
 @auth_bp.route("/me", methods=["GET"])
-@jwt_required()
+@authenticated_user_required
 def me():
-    claims = get_jwt()
-    if claims.get("mfa_pending") or claims.get("mfa_enrollment"):
-        return error("Sessão incompleta.", status=403)
-
-    user_id = _get_user_id_from_identity()
-    if user_id is None:
-        return error("Utilizador inválido.", status=401)
-
-    user = auth_service.get_active_completed_user(user_id)
-    if not user:
-        return error("Utilizador inválido.", status=401)
+    user = g.current_user
 
     return success(
         data={
@@ -402,5 +339,8 @@ def me():
             "email": user.email,
             "role": user.role,
             "mfa_enabled": user.mfa_enabled,
+            "permissions": sorted(
+                permission.value for permission in permissions_for_role(user.role)
+            ),
         }
     )

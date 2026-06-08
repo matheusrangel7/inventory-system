@@ -10,7 +10,7 @@ function renderDashboardUsersTable() {
     const users = pagination.items;
 
     if (!users.length) {
-        renderEmptyRow(tbody, 5, "Nenhum utilizador encontrado.");
+        renderEmptyRow(tbody, 4, "Nenhum utilizador encontrado.");
         return;
     }
 
@@ -21,7 +21,6 @@ function renderDashboardUsersTable() {
         <div class="${TABLE_TITLE_CLASS}">${escapeHTML(getUserEmail(u))}</div>
         <div class="${TABLE_SUBTITLE_CLASS}">Utilizador #${escapeHTML(getUserId(u))}</div>
     </td>
-    <td>${escapeHTML(getUserRole(u))}</td>
     <td>${renderUserLocationsCell(u)}</td>
     <td>${statusBadge(getUserStatus(u))}</td>
 </tr>
@@ -40,7 +39,7 @@ function renderUsersTable() {
     const users = pagination.items;
 
     if (!users.length) {
-        renderEmptyRow(tbody, 6, "Nenhum utilizador encontrado.");
+        renderEmptyRow(tbody, 5, "Nenhum utilizador encontrado.");
         return;
     }
 
@@ -51,7 +50,6 @@ function renderUsersTable() {
                         <div class="${TABLE_TITLE_CLASS}">${escapeHTML(getUserEmail(u))}</div>
                         <div class="${TABLE_SUBTITLE_CLASS}">Utilizador #${escapeHTML(getUserId(u))}</div>
                     </td>
-                    <td>${escapeHTML(getUserRole(u))}</td>
                     <td>${renderUserLocationsCell(u)}</td>
                     <td>${statusBadge(getUserStatus(u))}</td>
                     <td class="${TABLE_ACTION_CELL_CLASS}">
@@ -86,10 +84,6 @@ function getUserId(u) {
 
 function getUserEmail(u) {
     return primeiroValor(u, ["email", "user_email", "username"], "Sem email");
-}
-
-function getUserRole(u) {
-    return primeiroValor(u, ["role", "cargo", "tipo", "user_role"], "Utilizador");
 }
 
 function getUserStatus(u) {
@@ -304,9 +298,6 @@ function abrirModalUtilizador(user = null) {
     const locationIds = user ? getUserLocationIds(user) : [];
     preencherLinhasSalasUtilizador(locationIds);
 
-    const roleInput = document.getElementById("new-user-role");
-    if (roleInput) roleInput.value = "Gestor";
-
     const emailInput = document.getElementById("new-user-email");
     if (emailInput) {
         emailInput.disabled = false;
@@ -427,7 +418,6 @@ function ligarFormularioUtilizador() {
 
         const payload = {
             email,
-            role: "Gestor",
             location_ids: locationIds
         };
 

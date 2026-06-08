@@ -28,7 +28,7 @@ from app.constants import (
 def set_auth_cookies(response, user, refresh_token: str):
     access_token = create_access_token(
         identity=str(user.user_id),
-        additional_claims={"role": user.role, "email": user.email},
+        additional_claims={"token_use": "access"},
     )
 
     secure = current_app.config.get("JWT_COOKIE_SECURE", True)
@@ -123,7 +123,7 @@ def _minutes_to_seconds(minutes: float | int) -> int:
 def set_mfa_step_cookie(response, user_id: int, claims: dict):
     token = create_access_token(
         identity=str(user_id),
-        additional_claims=claims,
+        additional_claims={**claims, "token_use": "mfa_step"},
         expires_delta=timedelta(minutes=STEP_TOKEN_MINUTES),
     )
     secure = current_app.config.get("JWT_COOKIE_SECURE", True)
@@ -149,6 +149,7 @@ def get_mfa_step_claims():
     if not token:
         return None
     try:
-        return decode_token(token)
+        claims = decode_token(token)
     except PyJWTError:
         return None
+    return claims if claims.get("token_use") == "mfa_step" else None

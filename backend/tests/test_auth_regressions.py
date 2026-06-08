@@ -1,7 +1,9 @@
 from types import SimpleNamespace
 
-from flask import Flask
+import pytest
+from flask import Flask, g
 
+from app import _request_origin, _validate_security_config, create_app
 from app.config import ProductionConfig
 from app.routes import auth
 
@@ -119,3 +121,58 @@ def test_refresh_clears_cookies_when_user_is_no_longer_valid(monkeypatch):
 
 def test_production_requires_mutating_origin_by_default():
     assert ProductionConfig.REQUIRE_MUTATING_ORIGIN is True
+
+
+def test_production_rejects_in_memory_rate_limit_storage():
+    app = Flask(__name__)
+    app.config.update(
+        SECRET_KEY="s" * 64,
+        JWT_SECRET_KEY="j" * 64,
+        JWT_COOKIE_SECURE=True,
+        JWT_COOKIE_CSRF_PROTECT=True,
+        REQUIRE_MUTATING_ORIGIN=True,
+        RATELIMIT_STORAGE_URI="memory://",
+        APP_DB_USER="app_user",
+    )
+
+    with pytest.raises(RuntimeError, match="RATELIMIT_STORAGE_URI"):
+        _validate_security_config(app, "production")
+
+
+def test_request_origin_uses_proxy_normalized_request_values():
+    app = Flask(__name__)
+
+    with app.test_request_context(
+        "/api/test",
+        base_url="https://trusted.example",
+        headers={"X-Forwarded-Host": "attacker.example"},
+    ):
+        assert _request_origin() == "https://trusted.example"
+
+
+def test_unknown_environment_fails_closed():
+    with pytest.raises(RuntimeError, match="Ambiente Flask desconhecido"):
+        create_app("prod")
+
+
+def test_me_reuses_user_loaded_by_authentication_decorator(monkeypatch):
+    app = make_app()
+    user = SimpleNamespace(
+        user_id=7,
+        email="admin@ubi.pt",
+        role="Administrador",
+        mfa_enabled=True,
+    )
+    monkeypatch.setattr(
+        auth.auth_service,
+        "get_active_completed_user",
+        lambda user_id: pytest.fail("the /me route must not query the user again"),
+    )
+
+    with app.test_request_context("/api/auth/me"):
+        g.current_user = user
+        response, status = auth.me.__wrapped__()
+
+    assert status == 200
+    assert response.get_json()["data"]["user_id"] == 7
+    assert response.get_json()["data"]["role"] == "Administrador"

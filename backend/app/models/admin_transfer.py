@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
+from typing import Optional
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -12,6 +13,10 @@ class PendingAdminTransfer(Base):
         CheckConstraint(
             "initiated_by <> target_user_id",
             name="ck_pending_admin_transfer_not_self",
+        ),
+        CheckConstraint(
+            "status IN ('Pendente', 'Cancelada', 'Expirada', 'Concluída')",
+            name="ck_pending_admin_transfer_status",
         ),
     )
 
@@ -33,4 +38,15 @@ class PendingAdminTransfer(Base):
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="Pendente",
+    )
+
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )

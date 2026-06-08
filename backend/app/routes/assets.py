@@ -1,9 +1,14 @@
 import json
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, request
 
+from app.security.permissions import Permission
 from app.services import inventory_service
-from app.utils.decorators import get_current_role, get_current_user_id, manager_required
+from app.utils.decorators import (
+    get_current_role,
+    get_current_user_id,
+    permission_required,
+)
 from app.utils.responses import error, success
 
 assets_bp = Blueprint("assets", __name__, url_prefix="/api/assets")
@@ -53,13 +58,8 @@ def effective_manager_id():
     return manager_id
 
 
-@assets_bp.route("/ping", methods=["GET"])
-def ping():
-    return jsonify({"message": "assets blueprint ok"}), 200
-
-
 @assets_bp.route("/categories", methods=["GET"])
-@manager_required
+@permission_required(Permission.CATEGORIES_READ)
 def list_categories_alias():
     include_features = request.args.get("include_features", "false").lower() in {"1", "true", "yes", "sim"}
     categories = inventory_service.get_all_categories(include_features=include_features)
@@ -69,7 +69,7 @@ def list_categories_alias():
 
 
 @assets_bp.route("/features", methods=["GET"])
-@manager_required
+@permission_required(Permission.CATEGORIES_READ)
 def list_features():
     category_id = request.args.get("category_id", type=int)
     if not category_id:
@@ -79,21 +79,21 @@ def list_features():
 
 
 @assets_bp.route("/categories/<int:category_id>/features", methods=["GET"])
-@manager_required
+@permission_required(Permission.CATEGORIES_READ)
 def list_features_for_category_alias(category_id: int):
     features = inventory_service.get_features_by_category(category_id)
     return success(data=[inventory_service.feature_to_dict(feature) for feature in features])
 
 
 @assets_bp.route("/summary", methods=["GET"])
-@manager_required
+@permission_required(Permission.ASSETS_READ)
 def assets_summary():
     summary = inventory_service.get_assets_summary(manager_id=effective_manager_id())
     return success(data=summary)
 
 
 @assets_bp.route("/", methods=["GET"])
-@manager_required
+@permission_required(Permission.ASSETS_READ)
 def search_assets():
     result = inventory_service.get_assets_by_filters(
         location_id=request.args.get("location_id", type=int),
@@ -113,7 +113,7 @@ def search_assets():
 
 
 @assets_bp.route("/", methods=["POST"])
-@manager_required
+@permission_required(Permission.ASSETS_CREATE)
 def add_asset():
     data = request.get_json(silent=True) or {}
 
@@ -152,7 +152,7 @@ def add_asset():
 
 
 @assets_bp.route("/<int:asset_id>", methods=["GET"])
-@manager_required
+@permission_required(Permission.ASSETS_READ)
 def get_asset(asset_id: int):
     manager_id = get_current_user_id() if get_current_role() == "Gestor" else None
     asset = inventory_service.get_asset_by_id(asset_id, manager_id=manager_id)
@@ -162,7 +162,7 @@ def get_asset(asset_id: int):
 
 
 @assets_bp.route("/<int:asset_id>", methods=["PUT"])
-@manager_required
+@permission_required(Permission.ASSETS_UPDATE)
 def update_asset(asset_id: int):
     data = request.get_json(silent=True) or {}
 
@@ -202,7 +202,7 @@ def update_asset(asset_id: int):
 
 
 @assets_bp.route("/<int:asset_id>", methods=["DELETE"])
-@manager_required
+@permission_required(Permission.ASSETS_REMOVE)
 def delete_asset(asset_id: int):
     ok, message, asset = inventory_service.delete_asset(
         asset_id=asset_id,

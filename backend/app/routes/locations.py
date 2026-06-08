@@ -1,7 +1,12 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, request
 
+from app.security.permissions import Permission
 from app.services import location_service
-from app.utils.decorators import admin_required, get_current_role, get_current_user_id, manager_required
+from app.utils.decorators import (
+    get_current_role,
+    get_current_user_id,
+    permission_required,
+)
 from app.utils.responses import error, success
 from app.models.location import Location
 
@@ -32,19 +37,14 @@ def effective_manager_id():
     return manager_id
 
 
-@locations_bp.route("/ping", methods=["GET"])
-def ping():
-    return jsonify({"message": "locations blueprint ok"}), 200
-
-
 @locations_bp.route("/", methods=["GET"])
-@manager_required
+@permission_required(Permission.LOCATIONS_READ)
 def list_locations():
     return success(data=location_service.get_all_locations(manager_id=effective_manager_id()))
 
 
 @locations_bp.route("/<int:location_id>", methods=["GET"])
-@manager_required
+@permission_required(Permission.LOCATIONS_READ)
 def get_location(location_id: int):
     manager_id = get_current_user_id() if get_current_role() == "Gestor" else None
     location = location_service.get_location_by_id(location_id, manager_id=manager_id)
@@ -54,7 +54,7 @@ def get_location(location_id: int):
 
 
 @locations_bp.route("/", methods=["POST"])
-@admin_required
+@permission_required(Permission.LOCATIONS_CREATE)
 def create_location():
     data = request.get_json(silent=True) or {}
     location_name = data.get("location_name") or data.get("name") or data.get("designacao")
@@ -71,7 +71,7 @@ def create_location():
 
 
 @locations_bp.route("/<int:location_id>", methods=["PUT"])
-@admin_required
+@permission_required(Permission.LOCATIONS_UPDATE)
 def update_location(location_id: int):
     data = request.get_json(silent=True) or {}
     location_name = data.get("location_name") or data.get("name") or data.get("designacao")
@@ -89,7 +89,7 @@ def update_location(location_id: int):
 
 
 @locations_bp.route("/<int:location_id>", methods=["DELETE"])
-@admin_required
+@permission_required(Permission.LOCATIONS_REMOVE)
 def delete_location(location_id: int):
     ok, message, location = location_service.delete_location(
         location_id=location_id,

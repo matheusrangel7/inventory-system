@@ -1,15 +1,16 @@
 from flask import Blueprint, request
 
+from app.security.permissions import Permission
 from app.services import log_service
 from app.services.scheduler_service import check_maintenance
-from app.utils.decorators import admin_required
+from app.utils.decorators import permission_required
 from app.utils.responses import error, success
 
 logs_bp = Blueprint("logs", __name__, url_prefix="/api/logs")
 
 
 @logs_bp.route("/", methods=["GET"])
-@admin_required
+@permission_required(Permission.LOGS_READ)
 def list_logs():
     limit = request.args.get("limit", default=200, type=int)
     limit = max(1, min(limit or 200, 1000))
@@ -17,7 +18,7 @@ def list_logs():
 
 
 @logs_bp.route("/trigger-maintenance-check", methods=["POST"])
-@admin_required
+@permission_required(Permission.MAINTENANCE_RUN)
 def trigger_maintenance_check():
     updated = check_maintenance()
     return success(
@@ -27,7 +28,7 @@ def trigger_maintenance_check():
 
 
 @logs_bp.route("/<int:log_id>", methods=["GET"])
-@admin_required
+@permission_required(Permission.LOGS_READ)
 def get_log(log_id: int):
     log = log_service.get_log_by_id(log_id)
     if not log:

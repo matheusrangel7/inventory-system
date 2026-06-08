@@ -17,14 +17,14 @@ class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-insecure")
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "jwt-insecure")
 
-    DB_USER = os.environ.get("DB_USER", "app_user")
-    DB_PASSWORD = os.environ.get("DB_PASSWORD", "password")
+    APP_DB_USER = os.environ.get("APP_DB_USER", "app_user")
+    APP_DB_PASSWORD = os.environ.get("APP_DB_PASSWORD", "password")
     DB_HOST = os.environ.get("DB_HOST", "db")
     DB_PORT = os.environ.get("DB_PORT", "5432")
     DB_NAME = os.environ.get("DB_NAME", "inventory_db")
 
     DATABASE_URL = (
-        f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}"
+        f"postgresql+psycopg2://{APP_DB_USER}:{APP_DB_PASSWORD}"
         f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     )
 
@@ -37,7 +37,7 @@ class Config:
 
     JWT_TOKEN_LOCATION = ["cookies"]
     JWT_COOKIE_SECURE = env_bool("JWT_COOKIE_SECURE", False)
-    JWT_COOKIE_SAMESITE = os.environ.get("JWT_COOKIE_SAMESITE", "Lax")
+    JWT_COOKIE_SAMESITE = os.environ.get("JWT_COOKIE_SAMESITE", "Strict")
     JWT_COOKIE_CSRF_PROTECT = env_bool("JWT_COOKIE_CSRF_PROTECT", False)
     JWT_CSRF_IN_COOKIES = True
     JWT_ACCESS_CSRF_COOKIE_NAME = "csrf_access_token"
@@ -47,6 +47,7 @@ class Config:
     JWT_REFRESH_CSRF_COOKIE_PATH = "/"
     JWT_REFRESH_CSRF_HEADER_NAME = "X-CSRF-TOKEN"
     REQUIRE_MUTATING_ORIGIN = env_bool("REQUIRE_MUTATING_ORIGIN", False)
+    RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
 
     JWT_ACCESS_COOKIE_PATH = "/api/"
     JWT_REFRESH_COOKIE_PATH = "/api/auth/refresh"
