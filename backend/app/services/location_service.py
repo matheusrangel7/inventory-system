@@ -80,7 +80,7 @@ def _validate_manager(manager_id: Any) -> tuple[bool, str, int | None]:
     ).scalar_one_or_none()
     if not manager:
         return False, "Gestor não encontrado ou inativo.", None
-    if manager.role not in ("Gestor", "Administrador"):
+    if manager.role != "Gestor":
         return False, "Utilizador inválido para gestor responsável.", None
     return True, "Gestor válido.", parsed
 

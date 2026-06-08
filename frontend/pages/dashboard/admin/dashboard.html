@@ -72,20 +72,14 @@
                             <div class="asset-search-main search-main-simple flex flex-wrap items-end gap-3">
                                 <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
                                     <label for="dash-users-search">Pesquisar</label>
-                                    <input type="text" id="dash-users-search" placeholder="ID, email ou cargo">
+                                    <input type="text" id="dash-users-search" placeholder="ID, email ou estado">
                                 </div>
                                 <button type="button" class="asset-search-button asset-search-button-secondary inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-900 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-blue-900 transition hover:bg-blue-50 aria-expanded:bg-blue-50" data-filter-drawer-toggle="dashboardUsers" aria-controls="dashboardUsersFiltersDrawer" aria-expanded="false">Filtros</button>
                                 <button type="button" data-clear-filter="dashboardUsers" class="asset-search-button asset-search-button-danger inline-flex min-h-10 items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-red-700 transition hover:border-red-600 hover:bg-red-50">Limpar</button>
                             </div>
                             <div id="dashboardUsersActiveFiltersSummary" class="asset-active-summary flex flex-wrap gap-2 empty:hidden"></div>
                             <div id="dashboardUsersFiltersDrawer" class="asset-filters-drawer mt-4 hidden rounded-xl border border-gray-200 bg-white p-4" data-filter-drawer="dashboardUsers">
-                                <div class="asset-filters-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
-                                        <label for="dash-users-role">Cargo</label>
-                                        <select id="dash-users-role">
-                                            <option value="">Todos</option>
-                                        </select>
-                                    </div>
+                                <div class="asset-filters-grid grid grid-cols-1 gap-3 md:grid-cols-2">
                                     <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
                                         <label for="dash-users-status">Estado</label>
                                         <select id="dash-users-status">
@@ -98,7 +92,6 @@
                                             <option value="id-desc">Mais recentes</option>
                                             <option value="email-asc">Email A-Z</option>
                                             <option value="email-desc">Email Z-A</option>
-                                            <option value="role-asc">Cargo A-Z</option>
                                             <option value="id-asc">ID crescente</option>
                                         </select>
                                     </div>
@@ -113,7 +106,6 @@
                                 <tr>
                                     <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">ID</th>
                                     <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">EMAIL</th>
-                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">TIPO</th>
                                     <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">SALAS</th>
                                     <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">REGISTO</th>
                                 </tr>
@@ -140,7 +132,7 @@
                             <div class="asset-search-main search-main-action flex flex-wrap items-end gap-3">
                                 <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
                                     <label for="users-search">Pesquisar</label>
-                                    <input type="text" id="users-search" placeholder="ID, email ou cargo">
+                                    <input type="text" id="users-search" placeholder="ID, email ou estado">
                                 </div>
                                 <button type="button" class="asset-search-button asset-search-button-secondary inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-900 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-blue-900 transition hover:bg-blue-50 aria-expanded:bg-blue-50" data-filter-drawer-toggle="users" aria-controls="usersFiltersDrawer" aria-expanded="false">Filtros</button>
                                 <button type="button" data-clear-filter="users" class="asset-search-button asset-search-button-danger inline-flex min-h-10 items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-red-700 transition hover:border-red-600 hover:bg-red-50">Limpar</button>
@@ -148,13 +140,7 @@
                             </div>
                             <div id="usersActiveFiltersSummary" class="asset-active-summary flex flex-wrap gap-2 empty:hidden"></div>
                             <div id="usersFiltersDrawer" class="asset-filters-drawer mt-4 hidden rounded-xl border border-gray-200 bg-white p-4" data-filter-drawer="users">
-                                <div class="asset-filters-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
-                                        <label for="users-role">Cargo</label>
-                                        <select id="users-role">
-                                            <option value="">Todos</option>
-                                        </select>
-                                    </div>
+                                <div class="asset-filters-grid grid grid-cols-1 gap-3 md:grid-cols-2">
                                     <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
                                         <label for="users-status">Estado</label>
                                         <select id="users-status">
@@ -166,8 +152,6 @@
                                         <select id="users-sort">
                                             <option value="email-asc">Email A-Z</option>
                                             <option value="email-desc">Email Z-A</option>
-                                            <option value="role-asc">Cargo A-Z</option>
-                                            <option value="role-desc">Cargo Z-A</option>
                                             <option value="id-asc">ID crescente</option>
                                             <option value="id-desc">ID decrescente</option>
                                         </select>
@@ -183,7 +167,6 @@
                                 <tr>
                                     <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">ID</th>
                                     <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">EMAIL</th>
-                                    <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">CARGO</th>
                                     <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">SALAS</th>
                                     <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">REGISTO</th>
                                     <th class="sticky right-0 z-[9] w-px whitespace-nowrap border-l border-gray-200 bg-slate-50 px-2 py-3 text-right text-xs font-black uppercase tracking-wide text-blue-900 shadow-[-10px_0_14px_-18px_rgba(15,23,42,0.75)]">AÇÕES</th>
@@ -520,13 +503,6 @@
                 <div>
                     <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">Email</label>
                     <input id="new-user-email" type="email" required class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="gestor@ubi.pt">
-                </div>
-                <div>
-                    <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">Cargo</label>
-                    <input id="new-user-role" type="hidden" value="Gestor">
-                    <div class="w-full rounded-lg border-2 border-blue-900 bg-slate-50 px-3 py-2 text-sm font-bold text-gray-900">
-                        Gestor
-                    </div>
                 </div>
                 <div class="rounded-2xl border border-blue-100 bg-blue-50/40 p-3">
                     <div class="mb-3 flex flex-wrap items-center justify-between gap-2">

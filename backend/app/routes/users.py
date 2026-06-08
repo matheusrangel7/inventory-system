@@ -1,44 +1,37 @@
 from flask import Blueprint, request
 
+from app.security.permissions import Permission
 from app.services import user_service
-from app.utils.decorators import admin_required, get_current_user_id
+from app.utils.decorators import get_current_user_id, permission_required
 from app.utils.responses import error, success
 
 users_bp = Blueprint("users", __name__, url_prefix="/api/users")
 
 
-def _is_allowed_create_user_role(role: str | None) -> bool:
-    return role is None or role == "Gestor"
-
-
 @users_bp.route("/", methods=["GET"])
-@admin_required
+@permission_required(Permission.USERS_READ)
 def list_users():
     return success(data=user_service.get_all_gestores())
 
 
 @users_bp.route("/pending", methods=["GET"])
-@admin_required
+@permission_required(Permission.USERS_READ)
 def list_pending():
     return success(data=user_service.get_pending_gestores())
 
 
 @users_bp.route("/", methods=["POST"])
-@admin_required
+@permission_required(Permission.USERS_INVITE)
 def create_user():
     data = request.get_json(silent=True)
-    if not data:
+    if not isinstance(data, dict) or not data:
         return error("Body JSON inválido ou ausente.", status=400)
 
-    email = data.get("email", "").strip().lower()
-    role = data.get("role")
-    location_ids = data.get("location_ids", [])
+    if "role" in data:
+        return error("O campo role não pode ser definido por esta rota.", status=400)
 
-    if not _is_allowed_create_user_role(role):
-        return error(
-            "Apenas gestores podem ser criados por esta rota.",
-            status=400,
-        )
+    email = data.get("email", "").strip().lower()
+    location_ids = data.get("location_ids", [])
 
     admin_id = get_current_user_id()
     ok, message, user, status = user_service.create_gestor(
@@ -51,20 +44,21 @@ def create_user():
 
 
 @users_bp.route("/<int:user_id>", methods=["PUT"])
-@admin_required
+@permission_required(Permission.USERS_UPDATE)
 def update_user(user_id: int):
     data = request.get_json(silent=True)
-    if not data:
+    if not isinstance(data, dict) or not data:
         return error("Body JSON inválido ou ausente.", status=400)
 
+    if "role" in data:
+        return error("O campo role não pode ser alterado por esta rota.", status=400)
+
     email = data.get("email", "").strip().lower()
-    role = data.get("role")
     location_ids = data.get("location_ids", [])
 
     ok, message, user = user_service.update_user(
         user_id=user_id,
         email=email,
-        role=role,
         location_ids=location_ids,
         admin_id=get_current_user_id(),
     )
@@ -75,7 +69,7 @@ def update_user(user_id: int):
 
 
 @users_bp.route("/<int:user_id>", methods=["DELETE"])
-@admin_required
+@permission_required(Permission.USERS_DEACTIVATE)
 def delete_user(user_id: int):
     ok, message, user = user_service.delete_user(
         user_id=user_id,
@@ -88,7 +82,7 @@ def delete_user(user_id: int):
 
 
 @users_bp.route("/<int:target_id>/resend-registration", methods=["POST"])
-@admin_required
+@permission_required(Permission.USERS_RESEND_REGISTRATION)
 def resend_registration(target_id: int):
     ok, message = user_service.resend_registration_email(target_id)
     if not ok:

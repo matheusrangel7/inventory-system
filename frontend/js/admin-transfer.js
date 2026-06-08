@@ -236,20 +236,6 @@ function validarFormularioTransferenciaAdmin() {
     return "";
 }
 
-async function obterActionTokenTransferenciaAdmin(password) {
-    const result = await api.post("/auth/verify-password", { password }, { skipRefresh: true });
-    if (!result.success) {
-        throw new Error(result.error || result.message || "Não foi possível confirmar a senha.");
-    }
-
-    const actionToken = result.data?.action_token;
-    if (!actionToken) {
-        throw new Error("Token de confirmação ausente.");
-    }
-
-    return actionToken;
-}
-
 async function executarTransferenciaAdmin() {
     if (adminTransferBusy) return;
 
@@ -264,13 +250,11 @@ async function executarTransferenciaAdmin() {
     renderAdminTransferMessage("");
 
     try {
-        const actionToken = await obterActionTokenTransferenciaAdmin(password);
-
         if (adminTransferMode === "existing") {
             const targetUserId = document.getElementById("admin-transfer-target-user")?.value || "";
             await postJSON("/admin-transfer/existing", {
                 target_user_id: Number(targetUserId),
-                action_token: actionToken
+                password
             });
             mostrarToast("Administração transferida com sucesso.");
             renderAdminTransferMessage("Administração transferida. A sessão atual será encerrada.", false);
@@ -283,7 +267,7 @@ async function executarTransferenciaAdmin() {
         const email = document.getElementById("admin-transfer-new-email")?.value.trim() || "";
         await postJSON("/admin-transfer/new", {
             email,
-            action_token: actionToken
+            password
         });
         mostrarToast("Transferência iniciada com sucesso.");
         await carregarDados();

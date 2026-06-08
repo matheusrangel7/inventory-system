@@ -7,6 +7,8 @@ const AUTH_PATHS = {
     gestorDashboard: "/painel/gestor",
 };
 
+let currentAuthenticatedUser = null;
+
 function isProtectedDashboardPath() {
     return window.location.pathname.startsWith("/painel/");
 }
@@ -50,7 +52,12 @@ async function redirectIfAuthenticated() {
 async function fetchCurrentUser(options = {}) {
     const result = await api.get("/auth/me", options);
     if (!result.success) return null;
+    currentAuthenticatedUser = result.data;
     return result.data;
+}
+
+function hasPermission(permission, user = currentAuthenticatedUser) {
+    return Array.isArray(user?.permissions) && user.permissions.includes(permission);
 }
 
 async function requireAuth() {

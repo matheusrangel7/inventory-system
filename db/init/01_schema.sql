@@ -45,11 +45,15 @@ CREATE TABLE IF NOT EXISTS pending_admin_transfer (
     initiated_by INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     target_user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    status VARCHAR(20) NOT NULL DEFAULT 'Pendente',
+    resolved_at TIMESTAMPTZ,
+    CHECK (status IN ('Pendente', 'Cancelada', 'Expirada', 'Concluída')),
     CHECK (initiated_by <> target_user_id)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_pending_admin_transfer_singleton
-ON pending_admin_transfer ((true));
+ON pending_admin_transfer ((true))
+WHERE status = 'Pendente';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_users_registration_token_hash
 ON users (registration_token_hash)

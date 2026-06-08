@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from flask import Flask, jsonify, request
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from werkzeug.middleware.proxy_fix import ProxyFix
 from app.services.scheduler_service import check_maintenance
 
 from app.config import config_map
@@ -26,7 +27,19 @@ def create_app(config_name: str = None) -> Flask:
     if config_name is None:
         config_name = os.environ.get("FLASK_ENV", "development")
 
-    app.config.from_object(config_map.get(config_name, config_map["default"]))
+    config_class = config_map.get(config_name)
+    if config_class is None:
+        raise RuntimeError(f"Ambiente Flask desconhecido: {config_name}.")
+
+    app.config.from_object(config_class)
+    _validate_security_config(app, config_name)
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app,
+        x_for=1,
+        x_proto=1,
+        x_host=1,
+        x_port=1,
+    )
     _register_request_security(app)
 
     # Inicializar extensões
@@ -34,6 +47,7 @@ def create_app(config_name: str = None) -> Flask:
     jwt.init_app(app)
     limiter.init_app(app)
     mail.init_app(app)
+    _register_cli(app)
 
     # Registar Blueprints
     from app.routes.auth import auth_bp
@@ -55,12 +69,51 @@ def create_app(config_name: str = None) -> Flask:
     # Rota de Health Check
     @app.route("/api/health", methods=["GET"])
     def health():
-        return jsonify({"status": "ok", "environment": config_name}), 200
+        return jsonify({"status": "ok"}), 200
 
     # Scheduler
     _init_scheduler(app)
 
     return app
+
+
+def _validate_security_config(app: Flask, config_name: str) -> None:
+    if config_name != "production":
+        return
+
+    insecure_values = {"", "dev-insecure", "jwt-insecure", "change-me", "password"}
+    for setting in ("SECRET_KEY", "JWT_SECRET_KEY"):
+        value = str(app.config.get(setting) or "")
+        if value in insecure_values or len(value) < 32:
+            raise RuntimeError(f"{setting} deve ser um segredo forte em produção.")
+
+    required_flags = (
+        "JWT_COOKIE_SECURE",
+        "JWT_COOKIE_CSRF_PROTECT",
+        "REQUIRE_MUTATING_ORIGIN",
+    )
+    if any(not app.config.get(setting) for setting in required_flags):
+        raise RuntimeError("Configuração insegura de cookies/CSRF em produção.")
+
+    if app.config.get("RATELIMIT_STORAGE_URI") == "memory://":
+        raise RuntimeError(
+            "RATELIMIT_STORAGE_URI deve usar armazenamento partilhado em produção."
+        )
+
+    owner_user = os.environ.get("POSTGRES_USER")
+    app_user = app.config.get("APP_DB_USER")
+    if owner_user and owner_user == app_user:
+        raise RuntimeError("POSTGRES_USER e APP_DB_USER devem ser diferentes.")
+
+    app_db_password = str(app.config.get("APP_DB_PASSWORD") or "")
+    if app_db_password in insecure_values or len(app_db_password) < 12:
+        raise RuntimeError("APP_DB_PASSWORD deve ser forte em produção.")
+
+
+def _register_cli(app: Flask) -> None:
+    from app.cli import bootstrap_admin
+
+    app.cli.add_command(bootstrap_admin)
 
 
 def _register_request_security(app: Flask) -> None:
@@ -84,9 +137,7 @@ def _register_request_security(app: Flask) -> None:
 
 
 def _request_origin() -> str:
-    proto = request.headers.get("X-Forwarded-Proto", request.scheme)
-    host = request.headers.get("X-Forwarded-Host", request.host)
-    return f"{proto}://{host}"
+    return f"{request.scheme}://{request.host}"
 
 
 def _is_same_origin(source: str, expected: str) -> bool:

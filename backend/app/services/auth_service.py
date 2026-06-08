@@ -3,6 +3,7 @@ from sqlalchemy import select
 
 from app.extensions import db, ph, DUMMY_ARGON2_HASH
 from app.models.user import User
+from app.security.permissions import Permission, has_permission
 from app.utils.audit import log_action
 from app.constants import MIN_PASSWORD_LENGTH
 
@@ -59,8 +60,8 @@ def verify_password(user_id: int, password: str) -> tuple[bool, str]:
     if not user:
         return False, "Utilizador inválido."
 
-    if user.role != "Administrador":
-        return False, "Acesso restrito a administradores."
+    if not has_permission(user.role, Permission.ADMIN_TRANSFER_START):
+        return False, "Acesso não autorizado."
 
     try:
         ph.verify(user.password_hash, password)

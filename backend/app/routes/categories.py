@@ -1,7 +1,8 @@
 from flask import Blueprint, request
 
+from app.security.permissions import Permission
 from app.services import inventory_service
-from app.utils.decorators import admin_required, get_current_user_id, manager_required
+from app.utils.decorators import get_current_user_id, permission_required
 from app.utils.responses import error, success
 
 categories_bp = Blueprint("categories", __name__, url_prefix="/api/categories")
@@ -12,7 +13,7 @@ def include_features_requested() -> bool:
 
 
 @categories_bp.route("/", methods=["GET"])
-@manager_required
+@permission_required(Permission.CATEGORIES_READ)
 def list_categories():
     include_features = include_features_requested()
     categories = inventory_service.get_all_categories(include_features=include_features)
@@ -22,7 +23,7 @@ def list_categories():
 
 
 @categories_bp.route("/", methods=["POST"])
-@admin_required
+@permission_required(Permission.CATEGORIES_CREATE)
 def create_category():
     data = request.get_json(silent=True) or {}
     name = (data.get("category_name") or data.get("name") or "").strip()
@@ -40,7 +41,7 @@ def create_category():
 
 
 @categories_bp.route("/<int:category_id>", methods=["GET"])
-@manager_required
+@permission_required(Permission.CATEGORIES_READ)
 def get_category(category_id: int):
     category = inventory_service.get_category_by_id(category_id)
     if not category:
@@ -49,7 +50,7 @@ def get_category(category_id: int):
 
 
 @categories_bp.route("/<int:category_id>", methods=["PUT"])
-@admin_required
+@permission_required(Permission.CATEGORIES_UPDATE)
 def update_category(category_id: int):
     data = request.get_json(silent=True) or {}
     name = (data.get("category_name") or data.get("name") or "").strip()
@@ -67,7 +68,7 @@ def update_category(category_id: int):
 
 
 @categories_bp.route("/<int:category_id>", methods=["DELETE"])
-@admin_required
+@permission_required(Permission.CATEGORIES_REMOVE)
 def delete_category(category_id: int):
     ok, message, category = inventory_service.delete_category(category_id, get_current_user_id())
     if not ok:
@@ -76,7 +77,7 @@ def delete_category(category_id: int):
 
 
 @categories_bp.route("/<int:category_id>/features", methods=["GET"])
-@manager_required
+@permission_required(Permission.CATEGORIES_READ)
 def list_features_for_category(category_id: int):
     features = inventory_service.get_features_by_category(category_id)
     return success(data=[inventory_service.feature_to_dict(feature) for feature in features])

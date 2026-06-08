@@ -133,9 +133,5 @@ def revoke_all_sessions(user_id: int) -> None:
     db.session.commit()
 
 
-def _revoke_all_sessions(user_id: int) -> None:
-    revoke_all_sessions(user_id)
-
-
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
