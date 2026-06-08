@@ -6,8 +6,8 @@ import qrcode
 from flask import Blueprint, current_app, g, make_response, request
 
 from app.services import (
-    admin_transfer_service,
     auth_service,
+    mfa_enrollment_service,
     mfa_service,
     session_service,
 )
@@ -20,7 +20,6 @@ from app.utils.cookie_helpers import (
     build_refresh_csrf_token,
 )
 from app.utils.responses import success, error
-from app.extensions import db
 from app.extensions import limiter
 from app.constants import (
     CSRF_HEADER_NAME,
@@ -153,24 +152,9 @@ def enroll_mfa_confirm():
     if not code:
         return error("Código TOTP obrigatório.", status=400)
 
-    has_pending_transfer = admin_transfer_service.has_pending_for_target(user_id)
-
-    ok, message = mfa_service.confirm_mfa_setup(
-        user_id,
-        code,
-        commit=not has_pending_transfer,
-    )
+    ok, message = mfa_enrollment_service.confirm_enrollment(user_id, code)
     if not ok:
         return error(message, status=400)
-
-    if has_pending_transfer and not admin_transfer_service.complete_pending_after_mfa(
-        user_id
-    ):
-        db.session.rollback()
-        return error(
-            "Não foi possível concluir a transferência de administração.",
-            status=400,
-        )
 
     user = auth_service.get_active_completed_user(user_id)
     if not user:

@@ -129,28 +129,53 @@ def test_complete_pending_transfer_marks_transfer_completed(monkeypatch):
         lambda *args: None,
     )
     monkeypatch.setattr(admin_transfer_service, "log_action", lambda **kwargs: None)
-    monkeypatch.setattr(
-        admin_transfer_service.session_service,
-        "revoke_all_sessions",
-        lambda user_id: None,
-    )
-    monkeypatch.setattr(
-        admin_transfer_service.email_service,
-        "send_admin_transfer_email",
-        lambda email: True,
-    )
-    monkeypatch.setattr(
-        admin_transfer_service.email_service,
-        "send_admin_demoted_email",
-        lambda email: True,
-    )
+    completion = admin_transfer_service.apply_pending_after_mfa(target_user_id=2)
 
-    assert admin_transfer_service.complete_pending_after_mfa(target_user_id=2)
+    assert completion == admin_transfer_service.AdminTransferCompletion(
+        old_admin_id=1,
+        old_admin_email="old.admin@ubi.pt",
+        new_admin_id=2,
+        new_admin_email="new.admin@ubi.pt",
+    )
     assert transfer.status == AdminTransferStatus.COMPLETED
     assert transfer.resolved_at is not None
     assert old_admin.role == UserRole.MANAGER
     assert new_admin.role == UserRole.ADMINISTRATOR
-    assert session.committed
+    assert not session.committed
+
+
+def test_notify_admin_transfer_completion_runs_after_commit_actions(monkeypatch):
+    events = []
+    completion = admin_transfer_service.AdminTransferCompletion(
+        old_admin_id=1,
+        old_admin_email="old.admin@ubi.pt",
+        new_admin_id=2,
+        new_admin_email="new.admin@ubi.pt",
+    )
+    monkeypatch.setattr(
+        admin_transfer_service.session_service,
+        "revoke_all_sessions",
+        lambda user_id: events.append(("revoke", user_id)),
+    )
+    monkeypatch.setattr(
+        admin_transfer_service.email_service,
+        "send_admin_transfer_email",
+        lambda email: events.append(("promoted_email", email)),
+    )
+    monkeypatch.setattr(
+        admin_transfer_service.email_service,
+        "send_admin_demoted_email",
+        lambda email: events.append(("demoted_email", email)),
+    )
+
+    admin_transfer_service.notify_admin_transfer_completion(completion)
+
+    assert events == [
+        ("revoke", 1),
+        ("revoke", 2),
+        ("promoted_email", "new.admin@ubi.pt"),
+        ("demoted_email", "old.admin@ubi.pt"),
+    ]
 
 
 def test_reading_expired_transfer_does_not_mutate_state(monkeypatch):

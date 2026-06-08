@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -15,6 +16,15 @@ from app.services.registration_token_service import (
     is_registration_token_expired,
 )
 from app.utils.audit import log_action
+
+
+@dataclass(frozen=True)
+class AdminTransferCompletion:
+    old_admin_id: int
+    old_admin_email: str
+    new_admin_id: int
+    new_admin_email: str
+
 
 def _pending_transfer_stmt(*, for_update: bool = False):
     statement = select(PendingAdminTransfer).where(
@@ -405,7 +415,9 @@ def expire_pending_for_target(target_user_id: int) -> bool:
     return True
 
 
-def complete_pending_after_mfa(target_user_id: int) -> bool:
+def apply_pending_after_mfa(
+    target_user_id: int,
+) -> AdminTransferCompletion | None:
     transfer = db.session.execute(
         select(PendingAdminTransfer)
         .where(
@@ -415,7 +427,7 @@ def complete_pending_after_mfa(target_user_id: int) -> bool:
         .with_for_update()
     ).scalar_one_or_none()
     if not transfer:
-        return False
+        return None
 
     old_admin = db.session.execute(
         select(User)
@@ -429,16 +441,16 @@ def complete_pending_after_mfa(target_user_id: int) -> bool:
     ).scalar_one_or_none()
 
     if not old_admin or not new_admin:
-        return False
+        return None
     if not old_admin.is_active or old_admin.role != UserRole.ADMINISTRATOR:
-        return False
+        return None
     if (
         not new_admin.is_active
         or new_admin.registration_status != RegistrationStatus.COMPLETED
     ):
-        return False
+        return None
     if new_admin.role != UserRole.MANAGER or not new_admin.mfa_enabled:
-        return False
+        return None
 
     _remove_locations_from_user(old_admin.user_id, old_admin.user_id)
     old_admin_old_value = {"role": old_admin.role}
@@ -456,11 +468,7 @@ def complete_pending_after_mfa(target_user_id: int) -> bool:
         old_value=old_admin_old_value,
         new_value={"role": UserRole.MANAGER},
     )
-    try:
-        db.session.flush()
-    except IntegrityError:
-        db.session.rollback()
-        return False
+    db.session.flush()
 
     new_admin.role = UserRole.ADMINISTRATOR
     new_admin.registration_status = RegistrationStatus.COMPLETED
@@ -490,14 +498,18 @@ def complete_pending_after_mfa(target_user_id: int) -> bool:
         new_value=_resolved_transfer_value(transfer, "completed"),
     )
 
-    try:
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        return False
+    return AdminTransferCompletion(
+        old_admin_id=old_admin.user_id,
+        old_admin_email=old_admin.email,
+        new_admin_id=new_admin.user_id,
+        new_admin_email=new_admin.email,
+    )
 
-    session_service.revoke_all_sessions(old_admin.user_id)
-    session_service.revoke_all_sessions(new_admin.user_id)
-    email_service.send_admin_transfer_email(new_admin.email)
-    email_service.send_admin_demoted_email(old_admin.email)
-    return True
+
+def notify_admin_transfer_completion(
+    completion: AdminTransferCompletion,
+) -> None:
+    session_service.revoke_all_sessions(completion.old_admin_id)
+    session_service.revoke_all_sessions(completion.new_admin_id)
+    email_service.send_admin_transfer_email(completion.new_admin_email)
+    email_service.send_admin_demoted_email(completion.old_admin_email)

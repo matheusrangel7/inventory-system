@@ -49,26 +49,14 @@ def test_enroll_mfa_confirm_completes_pending_admin_transfer(monkeypatch):
         "get_mfa_step_claims",
         lambda: {"mfa_enrollment": True, "sub": "2"},
     )
-    monkeypatch.setattr(
-        auth.admin_transfer_service,
-        "has_pending_for_target",
-        lambda user_id: True,
-    )
-
-    def fake_confirm_mfa_setup(user_id, code, commit=True):
-        calls["confirm"] = {"user_id": user_id, "code": code, "commit": commit}
+    def fake_confirm_enrollment(user_id, code):
+        calls["confirm"] = {"user_id": user_id, "code": code}
         return True, "MFA ativado."
 
-    monkeypatch.setattr(auth.mfa_service, "confirm_mfa_setup", fake_confirm_mfa_setup)
-
-    def fake_complete_pending_after_mfa(user_id):
-        calls["complete_pending_after_mfa"] = user_id
-        return True
-
     monkeypatch.setattr(
-        auth.admin_transfer_service,
-        "complete_pending_after_mfa",
-        fake_complete_pending_after_mfa,
+        auth.mfa_enrollment_service,
+        "confirm_enrollment",
+        fake_confirm_enrollment,
     )
     monkeypatch.setattr(
         auth.auth_service,
@@ -91,8 +79,7 @@ def test_enroll_mfa_confirm_completes_pending_admin_transfer(monkeypatch):
         response = auth.enroll_mfa_confirm()
 
     assert response == "auth-response"
-    assert calls["confirm"] == {"user_id": 2, "code": "123456", "commit": False}
-    assert calls["complete_pending_after_mfa"] == 2
+    assert calls["confirm"] == {"user_id": 2, "code": "123456"}
 
 
 def test_refresh_clears_cookies_when_user_is_no_longer_valid(monkeypatch):

@@ -27,7 +27,7 @@ def setup_mfa(user_id: int) -> tuple[bool, str, str | None, str | None]:
     return True, "QR Code gerado.", secret, otp_uri
 
 
-def confirm_mfa_setup(user_id: int, code: str, commit: bool = True) -> tuple[bool, str]:
+def apply_mfa_setup_confirmation(user_id: int, code: str) -> tuple[bool, str]:
     user = db.session.get(User, user_id)
 
     if not user or not user.is_active:
@@ -51,10 +51,14 @@ def confirm_mfa_setup(user_id: int, code: str, commit: bool = True) -> tuple[boo
         new_value={"mfa_enabled": True},
     )
 
-    if commit:
-        db.session.commit()
-
     return True, "MFA ativado com sucesso."
+
+
+def confirm_mfa_setup(user_id: int, code: str) -> tuple[bool, str]:
+    ok, message = apply_mfa_setup_confirmation(user_id, code)
+    if ok:
+        db.session.commit()
+    return ok, message
 
 
 def verify_mfa(user_id: int, code: str) -> tuple[bool, str]:
