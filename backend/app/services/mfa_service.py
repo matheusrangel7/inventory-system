@@ -54,13 +54,6 @@ def apply_mfa_setup_confirmation(user_id: int, code: str) -> tuple[bool, str]:
     return True, "MFA ativado com sucesso."
 
 
-def confirm_mfa_setup(user_id: int, code: str) -> tuple[bool, str]:
-    ok, message = apply_mfa_setup_confirmation(user_id, code)
-    if ok:
-        db.session.commit()
-    return ok, message
-
-
 def verify_mfa(user_id: int, code: str) -> tuple[bool, str]:
     user = db.session.get(User, user_id)
 

@@ -160,12 +160,12 @@ def test_notify_admin_transfer_completion_runs_after_commit_actions(monkeypatch)
     monkeypatch.setattr(
         admin_transfer_service.email_service,
         "send_admin_transfer_email",
-        lambda email: events.append(("promoted_email", email)),
+        lambda email: events.append(("promoted_email", email)) or True,
     )
     monkeypatch.setattr(
         admin_transfer_service.email_service,
         "send_admin_demoted_email",
-        lambda email: events.append(("demoted_email", email)),
+        lambda email: events.append(("demoted_email", email)) or True,
     )
 
     admin_transfer_service.notify_admin_transfer_completion(completion)
@@ -174,6 +174,58 @@ def test_notify_admin_transfer_completion_runs_after_commit_actions(monkeypatch)
         ("revoke", 1),
         ("revoke", 2),
         ("promoted_email", "new.admin@ubi.pt"),
+        ("demoted_email", "old.admin@ubi.pt"),
+    ]
+
+
+def test_notify_admin_transfer_completion_isolates_failures(monkeypatch):
+    events = []
+    session = SimpleNamespace(
+        rollback=lambda: events.append(("rollback", None)),
+    )
+    completion = admin_transfer_service.AdminTransferCompletion(
+        old_admin_id=1,
+        old_admin_email="old.admin@ubi.pt",
+        new_admin_id=2,
+        new_admin_email="new.admin@ubi.pt",
+    )
+    monkeypatch.setattr(
+        admin_transfer_service,
+        "db",
+        SimpleNamespace(session=session),
+    )
+
+    def revoke_sessions(user_id):
+        events.append(("revoke", user_id))
+        if user_id == completion.old_admin_id:
+            raise RuntimeError("session failure")
+
+    monkeypatch.setattr(
+        admin_transfer_service.session_service,
+        "revoke_all_sessions",
+        revoke_sessions,
+    )
+
+    def fail_admin_transfer_email(email):
+        raise RuntimeError("email failure")
+
+    monkeypatch.setattr(
+        admin_transfer_service.email_service,
+        "send_admin_transfer_email",
+        fail_admin_transfer_email,
+    )
+    monkeypatch.setattr(
+        admin_transfer_service.email_service,
+        "send_admin_demoted_email",
+        lambda email: events.append(("demoted_email", email)) or False,
+    )
+
+    admin_transfer_service.notify_admin_transfer_completion(completion)
+
+    assert events == [
+        ("revoke", 1),
+        ("rollback", None),
+        ("revoke", 2),
         ("demoted_email", "old.admin@ubi.pt"),
     ]
 

@@ -1,3 +1,5 @@
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -16,6 +18,8 @@ from app.services.registration_token_service import (
     is_registration_token_expired,
 )
 from app.utils.audit import log_action
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -509,7 +513,45 @@ def apply_pending_after_mfa(
 def notify_admin_transfer_completion(
     completion: AdminTransferCompletion,
 ) -> None:
-    session_service.revoke_all_sessions(completion.old_admin_id)
-    session_service.revoke_all_sessions(completion.new_admin_id)
-    email_service.send_admin_transfer_email(completion.new_admin_email)
-    email_service.send_admin_demoted_email(completion.old_admin_email)
+    for user_id in (completion.old_admin_id, completion.new_admin_id):
+        try:
+            session_service.revoke_all_sessions(user_id)
+        except Exception:
+            db.session.rollback()
+            logger.exception(
+                "Falha ao revogar sessões após transferência de administração "
+                "para o utilizador %s.",
+                user_id,
+            )
+
+    _send_transfer_notification(
+        email_service.send_admin_transfer_email,
+        completion.new_admin_email,
+        "promoção",
+    )
+    _send_transfer_notification(
+        email_service.send_admin_demoted_email,
+        completion.old_admin_email,
+        "alteração de perfil",
+    )
+
+
+def _send_transfer_notification(
+    send_email: Callable[[str], bool],
+    email: str,
+    event: str,
+) -> None:
+    try:
+        if not send_email(email):
+            logger.warning(
+                "Email de %s não enviado para %s após transferência "
+                "de administração.",
+                event,
+                email,
+            )
+    except Exception:
+        logger.exception(
+            "Falha inesperada ao enviar email de %s para %s.",
+            event,
+            email,
+        )

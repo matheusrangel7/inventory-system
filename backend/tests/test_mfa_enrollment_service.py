@@ -6,12 +6,15 @@ from app.services import admin_transfer_service, mfa_enrollment_service
 
 
 class FakeSession:
-    def __init__(self, rollback_effect=None):
+    def __init__(self, rollback_effect=None, commit_effect=None):
         self.commits = 0
         self.rollbacks = 0
         self.rollback_effect = rollback_effect
+        self.commit_effect = commit_effect
 
     def commit(self):
+        if self.commit_effect:
+            self.commit_effect()
         self.commits += 1
 
     def rollback(self):
@@ -195,3 +198,77 @@ def test_confirm_enrollment_rolls_back_database_error(monkeypatch):
     assert message == mfa_enrollment_service.TRANSFER_COMPLETION_ERROR
     assert session.commits == 0
     assert session.rollbacks == 1
+
+
+def test_confirm_enrollment_reports_regular_mfa_commit_failure(monkeypatch):
+    def fail_commit():
+        raise SQLAlchemyError("commit failure")
+
+    session = FakeSession(commit_effect=fail_commit)
+    monkeypatch.setattr(
+        mfa_enrollment_service,
+        "db",
+        SimpleNamespace(session=session),
+    )
+    monkeypatch.setattr(
+        mfa_enrollment_service.mfa_service,
+        "apply_mfa_setup_confirmation",
+        lambda user_id, code: (True, "MFA ativado com sucesso."),
+    )
+    monkeypatch.setattr(
+        mfa_enrollment_service.admin_transfer_service,
+        "has_pending_for_target",
+        lambda user_id: False,
+    )
+
+    ok, message = mfa_enrollment_service.confirm_enrollment(2, "123456")
+
+    assert not ok
+    assert message == mfa_enrollment_service.MFA_CONFIRMATION_ERROR
+    assert session.commits == 0
+    assert session.rollbacks == 1
+
+
+def test_confirm_enrollment_succeeds_when_post_commit_effects_fail(monkeypatch):
+    session = FakeSession()
+    completion = admin_transfer_service.AdminTransferCompletion(
+        old_admin_id=1,
+        old_admin_email="old.admin@ubi.pt",
+        new_admin_id=2,
+        new_admin_email="new.admin@ubi.pt",
+    )
+    monkeypatch.setattr(
+        mfa_enrollment_service,
+        "db",
+        SimpleNamespace(session=session),
+    )
+    monkeypatch.setattr(
+        mfa_enrollment_service.mfa_service,
+        "apply_mfa_setup_confirmation",
+        lambda user_id, code: (True, "MFA ativado com sucesso."),
+    )
+    monkeypatch.setattr(
+        mfa_enrollment_service.admin_transfer_service,
+        "has_pending_for_target",
+        lambda user_id: True,
+    )
+    monkeypatch.setattr(
+        mfa_enrollment_service.admin_transfer_service,
+        "apply_pending_after_mfa",
+        lambda user_id: completion,
+    )
+    def fail_notifications(result):
+        raise RuntimeError("notification failure")
+
+    monkeypatch.setattr(
+        mfa_enrollment_service.admin_transfer_service,
+        "notify_admin_transfer_completion",
+        fail_notifications,
+    )
+
+    ok, message = mfa_enrollment_service.confirm_enrollment(2, "123456")
+
+    assert ok
+    assert message == "MFA ativado com sucesso."
+    assert session.commits == 1
+    assert session.rollbacks == 0
