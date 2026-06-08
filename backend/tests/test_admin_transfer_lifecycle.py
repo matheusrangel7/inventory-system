@@ -144,6 +144,71 @@ def test_complete_pending_transfer_marks_transfer_completed(monkeypatch):
     assert not session.committed
 
 
+def test_existing_admin_transfer_notifies_only_after_commit(monkeypatch):
+    events = []
+    current = SimpleNamespace(
+        user_id=1,
+        email="old.admin@ubi.pt",
+        is_active=True,
+        role=UserRole.ADMINISTRATOR,
+    )
+    target = SimpleNamespace(
+        user_id=2,
+        email="new.admin@ubi.pt",
+        is_active=True,
+        role=UserRole.MANAGER,
+        registration_status=RegistrationStatus.COMPLETED,
+        mfa_enabled=True,
+    )
+    session = FakeSession([None, current, target])
+    session.commit = lambda: events.append("commit")
+
+    monkeypatch.setattr(admin_transfer_service, "db", SimpleNamespace(session=session))
+    monkeypatch.setattr(
+        admin_transfer_service,
+        "_verify_transfer_password",
+        lambda *args: (True, "Senha válida."),
+    )
+    monkeypatch.setattr(
+        admin_transfer_service,
+        "_remove_locations_from_user",
+        lambda *args: None,
+    )
+    monkeypatch.setattr(
+        admin_transfer_service,
+        "log_action",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        admin_transfer_service,
+        "notify_admin_transfer_completion",
+        lambda completion: events.append(("notify", completion)),
+    )
+
+    ok, message = admin_transfer_service.transfer_to_existing_admin(
+        current_admin_id=current.user_id,
+        target_user_id=target.user_id,
+        password="valid-password",
+    )
+
+    assert ok
+    assert message == "Administração transferida com sucesso."
+    assert current.role == UserRole.MANAGER
+    assert target.role == UserRole.ADMINISTRATOR
+    assert events == [
+        "commit",
+        (
+            "notify",
+            admin_transfer_service.AdminTransferCompletion(
+                old_admin_id=current.user_id,
+                old_admin_email=current.email,
+                new_admin_id=target.user_id,
+                new_admin_email=target.email,
+            ),
+        ),
+    ]
+
+
 def test_notify_admin_transfer_completion_runs_after_commit_actions(monkeypatch):
     events = []
     completion = admin_transfer_service.AdminTransferCompletion(

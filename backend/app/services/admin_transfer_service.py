@@ -224,16 +224,20 @@ def transfer_to_existing_admin(
         new_value={"role": target.role},
     )
 
+    completion = AdminTransferCompletion(
+        old_admin_id=current.user_id,
+        old_admin_email=current.email,
+        new_admin_id=target.user_id,
+        new_admin_email=target.email,
+    )
+
     try:
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
         return False, "Não foi possível concluir a transferência de administração."
 
-    session_service.revoke_all_sessions(current.user_id)
-    session_service.revoke_all_sessions(target.user_id)
-    email_service.send_admin_transfer_email(target.email)
-    email_service.send_admin_demoted_email(current.email)
+    notify_admin_transfer_completion(completion)
     return True, "Administração transferida com sucesso."
 
 
