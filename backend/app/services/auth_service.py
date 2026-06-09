@@ -1,6 +1,7 @@
 from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
 from sqlalchemy import select
 
+from app.domain.enums import RegistrationStatus
 from app.extensions import db, ph, DUMMY_ARGON2_HASH
 from app.models.user import User
 from app.security.permissions import Permission, has_permission
@@ -37,7 +38,7 @@ def login_user(email: str, password: str) -> tuple[bool, str, User | None]:
         user.password_hash = ph.hash(password)
         db.session.commit()
 
-    if user.registration_status != "Concluído":
+    if user.registration_status != RegistrationStatus.COMPLETED:
         return False, "O registo ainda não foi concluído. Verifique o seu email.", None
 
     if not user.is_active:
@@ -50,7 +51,7 @@ def get_active_completed_user(user_id: int) -> User | None:
     user = db.session.get(User, user_id)
     if not user or not user.is_active:
         return None
-    if user.registration_status != "Concluído":
+    if user.registration_status != RegistrationStatus.COMPLETED:
         return None
     return user
 
@@ -88,7 +89,7 @@ def complete_registration(
     if not user or not user.is_active:
         return False, "Link de registo inválido ou já utilizado.", None
 
-    if user.registration_status == "Concluído":
+    if user.registration_status == RegistrationStatus.COMPLETED:
         return False, "Este registo já foi concluído.", None
 
     if is_registration_token_expired(user):
@@ -97,7 +98,7 @@ def complete_registration(
     old_status = user.registration_status
 
     user.password_hash = ph.hash(new_password)
-    user.registration_status = "Concluído"
+    user.registration_status = RegistrationStatus.COMPLETED
     clear_registration_token(user)
 
     log_action(

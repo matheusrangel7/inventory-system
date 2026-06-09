@@ -1,5 +1,7 @@
 from enum import StrEnum
 
+from app.domain.enums import UserRole
+
 
 class Permission(StrEnum):
     ASSETS_READ = "assets.read"
@@ -43,15 +45,22 @@ GESTOR_PERMISSIONS = frozenset(
     }
 )
 
-ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
-    "Administrador": frozenset(Permission),
-    "Gestor": GESTOR_PERMISSIONS,
+ROLE_PERMISSIONS: dict[UserRole, frozenset[Permission]] = {
+    UserRole.ADMINISTRATOR: frozenset(Permission),
+    UserRole.MANAGER: GESTOR_PERMISSIONS,
 }
 
 
-def permissions_for_role(role: str | None) -> frozenset[Permission]:
-    return ROLE_PERMISSIONS.get(role or "", frozenset())
+def permissions_for_role(role: str | UserRole | None) -> frozenset[Permission]:
+    try:
+        normalized_role = UserRole(role) if role is not None else None
+    except (TypeError, ValueError):
+        return frozenset()
+    return ROLE_PERMISSIONS.get(normalized_role, frozenset())
 
 
-def has_permission(role: str | None, permission: Permission) -> bool:
+def has_permission(
+    role: str | UserRole | None,
+    permission: Permission,
+) -> bool:
     return permission in permissions_for_role(role)

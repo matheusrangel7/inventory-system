@@ -2,6 +2,7 @@ import click
 from sqlalchemy import select
 
 from app.constants import MIN_PASSWORD_LENGTH
+from app.domain.enums import RegistrationStatus, UserRole
 from app.extensions import db, ph
 from app.models.user import User
 from app.utils.audit import log_action
@@ -11,8 +12,8 @@ from app.utils.audit import log_action
 def bootstrap_admin() -> None:
     existing_admin = db.session.execute(
         select(User).where(
-            User.role == "Administrador",
-            User.registration_status == "Concluído",
+            User.role == UserRole.ADMINISTRATOR,
+            User.registration_status == RegistrationStatus.COMPLETED,
             User.is_active == True,
         )
     ).scalar_one_or_none()
@@ -42,8 +43,8 @@ def bootstrap_admin() -> None:
     admin = User(
         email=email,
         password_hash=ph.hash(password),
-        role="Administrador",
-        registration_status="Concluído",
+        role=UserRole.ADMINISTRATOR,
+        registration_status=RegistrationStatus.COMPLETED,
         mfa_enabled=False,
         is_active=True,
     )

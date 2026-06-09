@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import String, Boolean, DateTime, Enum
 from sqlalchemy.orm import Mapped, mapped_column
+from app.domain.enums import RegistrationStatus, UserRole
 from app.models.base import Base
 
 
@@ -12,14 +13,17 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(
-        Enum("Gestor", "Administrador", name="user_role_enum"),
+        Enum(*(role.value for role in UserRole), name="user_role_enum"),
         nullable=False,
-        default="Gestor",
+        default=UserRole.MANAGER,
     )
     registration_status: Mapped[str] = mapped_column(
-        Enum("Pendente", "Concluído", name="registration_status_enum"),
+        Enum(
+            *(status.value for status in RegistrationStatus),
+            name="registration_status_enum",
+        ),
         nullable=False,
-        default="Pendente",
+        default=RegistrationStatus.PENDING,
     )
     registration_token_hash: Mapped[Optional[str]] = mapped_column(
         String(64),
