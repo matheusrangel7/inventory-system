@@ -40,6 +40,16 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    reset_token_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL UNIQUE,
+    token_hash CHAR(64) NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS pending_admin_transfer (
     transfer_id SERIAL PRIMARY KEY,
     initiated_by INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,

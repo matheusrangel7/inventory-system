@@ -57,6 +57,7 @@ TO :"app_db_user";
 GRANT SELECT, INSERT, UPDATE ON
     users,
     user_sessions,
+    password_reset_tokens,
     pending_admin_transfer,
     locations,
     categories,
@@ -70,6 +71,7 @@ GRANT SELECT, INSERT ON audit_logs TO :"app_db_user";
 GRANT USAGE ON SEQUENCE
     users_user_id_seq,
     user_sessions_session_id_seq,
+    password_reset_tokens_reset_token_id_seq,
     pending_admin_transfer_transfer_id_seq,
     locations_location_id_seq,
     categories_category_id_seq,
