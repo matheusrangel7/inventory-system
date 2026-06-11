@@ -87,6 +87,9 @@ function shouldAttemptRefresh(path, options = {}) {
         "/auth/enroll-mfa/setup",
         "/auth/enroll-mfa/confirm",
         "/auth/complete-registration",
+        "/auth/password-reset/request",
+        "/auth/password-reset/validate",
+        "/auth/password-reset/complete",
     ];
 
     return !authPathsWithoutRefresh.includes(path);

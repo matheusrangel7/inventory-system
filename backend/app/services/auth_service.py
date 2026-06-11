@@ -6,7 +6,7 @@ from app.extensions import db, ph, DUMMY_ARGON2_HASH
 from app.models.user import User
 from app.security.permissions import Permission, has_permission
 from app.utils.audit import log_action
-from app.constants import MIN_PASSWORD_LENGTH
+from app.services.password_service import validate_password
 
 from app.services.registration_token_service import (
     clear_registration_token,
@@ -75,12 +75,9 @@ def verify_password(user_id: int, password: str) -> tuple[bool, str]:
 def complete_registration(
     token: str, new_password: str
 ) -> tuple[bool, str, User | None]:
-    if len(new_password) < MIN_PASSWORD_LENGTH:
-        return (
-            False,
-            f"A password deve ter pelo menos {MIN_PASSWORD_LENGTH} caracteres.",
-            None,
-        )
+    password_ok, password_message = validate_password(new_password)
+    if not password_ok:
+        return False, password_message, None
 
     user = db.session.execute(
         select(User).where(User.registration_token_hash == hash_token(token))
