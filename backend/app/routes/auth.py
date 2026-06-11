@@ -10,6 +10,7 @@ from flask import Blueprint, current_app, g, make_response, request
 from app.services import (
     auth_service,
     mfa_enrollment_service,
+    mfa_recovery_service,
     mfa_service,
     password_reset_service,
     session_service,
@@ -27,6 +28,7 @@ from app.extensions import limiter
 from app.constants import (
     CSRF_HEADER_NAME,
     LOGIN_RATE_LIMIT,
+    MFA_RECOVERY_RATE_LIMIT,
     PASSWORD_RESET_COMPLETE_RATE_LIMIT,
     PASSWORD_RESET_REQUEST_RATE_LIMIT,
     PASSWORD_RESET_RESPONSE_JITTER_MILLISECONDS,
@@ -213,11 +215,31 @@ def enroll_mfa_confirm():
     if not code:
         return error("Código TOTP obrigatório.", status=400)
 
-    ok, message = mfa_enrollment_service.confirm_enrollment(user_id, code)
+    ok, message, recovery_code = mfa_enrollment_service.confirm_enrollment(
+        user_id,
+        code,
+    )
     if not ok:
         return error(message, status=400)
 
-    user = auth_service.get_active_completed_user(user_id)
+    return success(
+        data={"recovery_code": recovery_code},
+        message=message,
+    )
+
+
+@auth_bp.route("/enroll-mfa/complete", methods=["POST"])
+@limiter.limit("5 per minute")
+def enroll_mfa_complete():
+    decoded = get_mfa_step_claims()
+    if not decoded or not decoded.get("mfa_enrollment"):
+        return error("Sessão de configuração MFA inválida ou expirada.", status=401)
+
+    user_id = _get_user_id_from_claims(decoded)
+    if user_id is None:
+        return error("Sessão de configuração MFA inválida ou expirada.", status=401)
+
+    user = mfa_service.get_enrollment_user_for_session(user_id)
     if not user:
         return error("Utilizador inválido.", status=401)
 
@@ -231,6 +253,34 @@ def enroll_mfa_confirm():
         data={"user_id": user.user_id, "email": user.email, "role": user.role},
     )
 
+    return clear_mfa_step_cookie(response)
+
+
+@auth_bp.route("/recover-mfa", methods=["POST"])
+@limiter.limit(MFA_RECOVERY_RATE_LIMIT)
+def recover_mfa():
+    decoded = get_mfa_step_claims()
+    if not decoded or not decoded.get("mfa_pending"):
+        return error("Sessão MFA inválida ou expirada.", status=401)
+
+    user_id = _get_user_id_from_claims(decoded)
+    if user_id is None:
+        return error("Sessão MFA inválida ou expirada.", status=401)
+
+    data = request.get_json(silent=True)
+    recovery_code = (data or {}).get("recovery_code", "").strip()
+    if not recovery_code:
+        return error("Código de recuperação obrigatório.", status=400)
+
+    ok, message = mfa_recovery_service.recover_authenticator(
+        user_id,
+        recovery_code,
+    )
+    if not ok:
+        return error(message, status=400)
+
+    response = make_response(success(message=message))
+    clear_auth_cookies(response)
     return clear_mfa_step_cookie(response)
 
 
@@ -253,11 +303,10 @@ def verify_mfa():
     if not code:
         return error("Código TOTP obrigatório.", status=400)
 
-    ok, message = mfa_service.verify_mfa(user_id, code)
+    ok, message, user = mfa_service.verify_mfa(user_id, code)
     if not ok:
         return error(message, status=401)
 
-    user = auth_service.get_active_completed_user(user_id)
     if not user:
         return error("Utilizador inválido.", status=401)
 

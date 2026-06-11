@@ -88,14 +88,11 @@ def test_password_reset_request_applies_delay_after_service(monkeypatch):
     ]
 
 
-def test_enroll_mfa_confirm_completes_pending_admin_transfer(monkeypatch):
+def test_enroll_mfa_confirm_returns_recovery_code_without_creating_session(
+    monkeypatch,
+):
     app = make_app()
     calls = {}
-    user = SimpleNamespace(
-        user_id=2,
-        email="novo.admin@ubi.pt",
-        role=UserRole.ADMINISTRATOR,
-    )
 
     monkeypatch.setattr(
         auth,
@@ -104,16 +101,44 @@ def test_enroll_mfa_confirm_completes_pending_admin_transfer(monkeypatch):
     )
     def fake_confirm_enrollment(user_id, code):
         calls["confirm"] = {"user_id": user_id, "code": code}
-        return True, "MFA ativado."
+        return True, "MFA ativado.", "ABCD-EFGH-JKLM-NPQR"
 
     monkeypatch.setattr(
         auth.mfa_enrollment_service,
         "confirm_enrollment",
         fake_confirm_enrollment,
     )
+    with app.test_request_context(
+        "/api/auth/enroll-mfa/confirm",
+        method="POST",
+        json={"code": "123456"},
+    ):
+        response = auth.enroll_mfa_confirm()
+
+    body, status = response
+    assert status == 200
+    assert body.get_json()["data"]["recovery_code"] == "ABCD-EFGH-JKLM-NPQR"
+    assert calls["confirm"] == {"user_id": 2, "code": "123456"}
+
+
+def test_enroll_mfa_complete_creates_authenticated_session(monkeypatch):
+    app = make_app()
+    user = SimpleNamespace(
+        user_id=2,
+        email="novo.admin@ubi.pt",
+        role=UserRole.ADMINISTRATOR,
+        mfa_enabled=True,
+        totp_secret="totp-secret",
+        mfa_recovery_code_hash="argon-hash",
+    )
     monkeypatch.setattr(
-        auth.auth_service,
-        "get_active_completed_user",
+        auth,
+        "get_mfa_step_claims",
+        lambda: {"mfa_enrollment": True, "sub": "2"},
+    )
+    monkeypatch.setattr(
+        auth.mfa_service,
+        "get_enrollment_user_for_session",
         lambda user_id: user,
     )
     monkeypatch.setattr(
@@ -125,14 +150,71 @@ def test_enroll_mfa_confirm_completes_pending_admin_transfer(monkeypatch):
     monkeypatch.setattr(auth, "clear_mfa_step_cookie", lambda response: response)
 
     with app.test_request_context(
-        "/api/auth/enroll-mfa/confirm",
+        "/api/auth/enroll-mfa/complete",
         method="POST",
-        json={"code": "123456"},
     ):
-        response = auth.enroll_mfa_confirm()
+        response = auth.enroll_mfa_complete()
 
     assert response == "auth-response"
-    assert calls["confirm"] == {"user_id": 2, "code": "123456"}
+
+
+def test_recover_mfa_requires_mfa_pending_claim(monkeypatch):
+    app = make_app()
+    monkeypatch.setattr(
+        auth,
+        "get_mfa_step_claims",
+        lambda: {"mfa_enrollment": True, "sub": "2"},
+    )
+    monkeypatch.setattr(
+        auth.mfa_recovery_service,
+        "recover_authenticator",
+        lambda *args: pytest.fail("service must not be called"),
+    )
+
+    with app.test_request_context(
+        "/api/auth/recover-mfa",
+        method="POST",
+        json={"recovery_code": "ABCD-EFGH-JKLM-NPQR"},
+    ):
+        response, status = auth.recover_mfa()
+
+    assert status == 401
+    assert response.get_json()["error"] == "Sessão MFA inválida ou expirada."
+
+
+def test_recover_mfa_clears_intermediate_cookies(monkeypatch):
+    app = make_app()
+    cleared = []
+    monkeypatch.setattr(
+        auth,
+        "get_mfa_step_claims",
+        lambda: {"mfa_pending": True, "sub": "2"},
+    )
+    monkeypatch.setattr(
+        auth.mfa_recovery_service,
+        "recover_authenticator",
+        lambda user_id, code: (True, "Autenticador desvinculado com sucesso."),
+    )
+    monkeypatch.setattr(
+        auth,
+        "clear_auth_cookies",
+        lambda response: cleared.append("auth") or response,
+    )
+    monkeypatch.setattr(
+        auth,
+        "clear_mfa_step_cookie",
+        lambda response: cleared.append("mfa") or response,
+    )
+
+    with app.test_request_context(
+        "/api/auth/recover-mfa",
+        method="POST",
+        json={"recovery_code": "ABCD-EFGH-JKLM-NPQR"},
+    ):
+        response = auth.recover_mfa()
+
+    assert response.status_code == 200
+    assert cleared == ["auth", "mfa"]
 
 
 def test_refresh_clears_cookies_when_user_is_no_longer_valid(monkeypatch):

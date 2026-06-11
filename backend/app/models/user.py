@@ -36,6 +36,10 @@ class User(Base):
 
     totp_secret: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    mfa_recovery_code_hash: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+    )
 
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(

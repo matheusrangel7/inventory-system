@@ -3,7 +3,11 @@ import logging
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.extensions import db
-from app.services import admin_transfer_service, mfa_service
+from app.services import (
+    admin_transfer_service,
+    mfa_recovery_service,
+    mfa_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -13,22 +17,31 @@ TRANSFER_COMPLETION_ERROR = (
 )
 
 
-def confirm_enrollment(user_id: int, code: str) -> tuple[bool, str]:
+def confirm_enrollment(
+    user_id: int,
+    code: str,
+) -> tuple[bool, str, str | None]:
     completion = None
     has_pending_transfer = False
+    recovery_code = None
 
     try:
         ok, message = mfa_service.apply_mfa_setup_confirmation(user_id, code)
         if not ok:
             db.session.rollback()
-            return False, message
+            return False, message, None
+
+        recovery_code = mfa_recovery_service.apply_recovery_code(user_id)
+        if recovery_code is None:
+            db.session.rollback()
+            return False, MFA_CONFIRMATION_ERROR, None
 
         has_pending_transfer = admin_transfer_service.has_pending_for_target(user_id)
         if has_pending_transfer:
             completion = admin_transfer_service.apply_pending_after_mfa(user_id)
             if completion is None:
                 db.session.rollback()
-                return False, TRANSFER_COMPLETION_ERROR
+                return False, TRANSFER_COMPLETION_ERROR, None
 
         db.session.commit()
     except SQLAlchemyError:
@@ -42,7 +55,7 @@ def confirm_enrollment(user_id: int, code: str) -> tuple[bool, str]:
             if has_pending_transfer
             else MFA_CONFIRMATION_ERROR
         )
-        return False, error_message
+        return False, error_message, None
     except Exception:
         db.session.rollback()
         raise
@@ -56,4 +69,4 @@ def confirm_enrollment(user_id: int, code: str) -> tuple[bool, str]:
                 user_id,
             )
 
-    return True, message
+    return True, message, recovery_code

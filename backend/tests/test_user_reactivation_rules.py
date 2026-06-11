@@ -51,6 +51,7 @@ def make_user(
         mfa_enabled=mfa_enabled,
         password_hash="old-hash",
         totp_secret="old-secret",
+        mfa_recovery_code_hash="old-recovery-hash",
         email="gestor@ubi.pt",
         created_at=None,
     )
@@ -109,6 +110,7 @@ def test_completed_gestor_reset_clears_old_credentials(monkeypatch):
     assert user.password_hash == "new-random-hash"
     assert user.totp_secret is None
     assert user.mfa_enabled is False
+    assert user.mfa_recovery_code_hash is None
 
 
 def test_completed_registration_email_change_is_blocked():

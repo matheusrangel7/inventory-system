@@ -22,3 +22,4 @@ def test_user_model_uses_existing_postgresql_enum_values():
         "Pendente",
         "Concluído",
     ]
+    assert User.__table__.c.mfa_recovery_code_hash.type.length == 255
