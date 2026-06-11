@@ -9,6 +9,7 @@ from app.services import (
     auth_service,
     mfa_enrollment_service,
     mfa_service,
+    password_reset_service,
     session_service,
 )
 from app.utils.cookie_helpers import (
@@ -24,6 +25,9 @@ from app.extensions import limiter
 from app.constants import (
     CSRF_HEADER_NAME,
     LOGIN_RATE_LIMIT,
+    PASSWORD_RESET_COMPLETE_RATE_LIMIT,
+    PASSWORD_RESET_REQUEST_RATE_LIMIT,
+    PASSWORD_RESET_VALIDATE_RATE_LIMIT,
     REFRESH_CSRF_COOKIE_NAME,
     REFRESH_TOKEN_COOKIE_NAME,
 )
@@ -65,6 +69,44 @@ def _get_user_id_from_claims(claims: dict) -> int | None:
         return int(claims["sub"])
     except (KeyError, TypeError, ValueError):
         return None
+
+
+@auth_bp.route("/password-reset/request", methods=["POST"])
+@limiter.limit(PASSWORD_RESET_REQUEST_RATE_LIMIT)
+def request_password_reset():
+    data = request.get_json(silent=True)
+    email = (data or {}).get("email", "").strip().lower()
+
+    if not email:
+        return error("Email obrigatório.", status=400)
+
+    message = password_reset_service.request_password_reset(email)
+    return success(message=message)
+
+
+@auth_bp.route("/password-reset/validate", methods=["GET"])
+@limiter.limit(PASSWORD_RESET_VALIDATE_RATE_LIMIT)
+def validate_password_reset():
+    token = request.args.get("token", "").strip()
+    if not password_reset_service.is_reset_token_valid(token):
+        return error(password_reset_service.INVALID_TOKEN_MESSAGE, status=400)
+    return success(message="Link de recuperação válido.")
+
+
+@auth_bp.route("/password-reset/complete", methods=["POST"])
+@limiter.limit(PASSWORD_RESET_COMPLETE_RATE_LIMIT)
+def complete_password_reset():
+    data = request.get_json(silent=True)
+    token = (data or {}).get("token", "").strip()
+    password = (data or {}).get("password", "")
+
+    if not token or not password:
+        return error("Token e palavra-passe são obrigatórios.", status=400)
+
+    ok, message = password_reset_service.complete_password_reset(token, password)
+    if not ok:
+        return error(message, status=400)
+    return success(message=message)
 
 
 @auth_bp.route("/login", methods=["POST"])

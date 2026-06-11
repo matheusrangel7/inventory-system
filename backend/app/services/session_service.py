@@ -113,6 +113,11 @@ def revoke_session(refresh_token: str) -> bool:
 
 
 def revoke_all_sessions(user_id: int) -> None:
+    apply_revoke_all_sessions(user_id)
+    db.session.commit()
+
+
+def apply_revoke_all_sessions(user_id: int) -> None:
     sessions = (
         db.session.execute(
             select(UserSession).where(
@@ -129,8 +134,6 @@ def revoke_all_sessions(user_id: int) -> None:
     for s in sessions:
         s.revoked = True
         s.revoked_at = now
-
-    db.session.commit()
 
 
 def _hash_token(token: str) -> str:

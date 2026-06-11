@@ -151,3 +151,70 @@ def send_admin_demoted_email(to_email: str) -> bool:
     except Exception as exc:
         current_app.logger.error(f"Erro ao enviar email de rebaixamento: {exc}")
         return False
+
+
+def send_password_reset_email(to_email: str, token: str) -> bool:
+    base_url = (current_app.config.get("APP_BASE_URL") or "http://localhost").rstrip(
+        "/"
+    )
+    link = f"{base_url}/redefinir-palavra-passe?token={token}"
+    msg = Message(
+        subject="[InvUBI] Recuperação de palavra-passe",
+        recipients=[to_email],
+        body=(
+            "Foi solicitada a recuperação da palavra-passe da sua conta.\n\n"
+            f"Defina uma nova palavra-passe através deste link:\n{link}\n\n"
+            "O link é válido durante 30 minutos e só pode ser utilizado uma vez.\n"
+            "Se não efetuou este pedido, ignore este email."
+        ),
+        html=(
+            "<p>Foi solicitada a recuperação da palavra-passe da sua conta "
+            "no <strong>InvUBI</strong>.</p>"
+            f'<p><a href="{link}" '
+            "style=\"background:#1e3a8a;color:white;padding:10px 20px;"
+            "text-decoration:none;border-radius:5px;\">"
+            "Definir nova palavra-passe</a></p>"
+            "<p>O link é válido durante 30 minutos e só pode ser utilizado "
+            "uma vez.</p>"
+            "<small>Se não efetuou este pedido, ignore este email.</small>"
+        ),
+    )
+
+    try:
+        mail.send(msg)
+        return True
+    except Exception as exc:
+        current_app.logger.error(
+            f"Erro ao enviar email de recuperação para {to_email}: {exc}"
+        )
+        return False
+
+
+def send_password_reset_confirmation_email(to_email: str) -> bool:
+    msg = Message(
+        subject="[InvUBI] Palavra-passe alterada",
+        recipients=[to_email],
+        body=(
+            "A palavra-passe da sua conta InvUBI foi redefinida.\n\n"
+            "Todas as sessões ativas foram encerradas. Inicie sessão novamente "
+            "com a nova palavra-passe.\n\n"
+            "Se não realizou esta alteração, contacte imediatamente o suporte."
+        ),
+        html=(
+            "<p>A palavra-passe da sua conta <strong>InvUBI</strong> foi "
+            "redefinida.</p>"
+            "<p>Todas as sessões ativas foram encerradas. Inicie sessão "
+            "novamente com a nova palavra-passe.</p>"
+            "<p style='color:#991b1b;'>Se não realizou esta alteração, "
+            "contacte imediatamente o suporte.</p>"
+        ),
+    )
+
+    try:
+        mail.send(msg)
+        return True
+    except Exception as exc:
+        current_app.logger.error(
+            f"Erro ao enviar confirmação de recuperação para {to_email}: {exc}"
+        )
+        return False
