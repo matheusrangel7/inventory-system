@@ -16,6 +16,13 @@
     const mfaSubmitBtn = document.getElementById("mfaSubmitBtn");
     const mfaBackBtn = document.getElementById("mfaBackBtn");
     const mfaError = document.getElementById("mfaError");
+    const showMfaRecoveryBtn = document.getElementById("showMfaRecoveryBtn");
+    const mfaRecoverySection = document.getElementById("mfaRecoverySection");
+    const mfaRecoveryCodeInput = document.getElementById("mfaRecoveryCode");
+    const mfaRecoverySubmitBtn = document.getElementById("mfaRecoverySubmitBtn");
+    const mfaRecoveryBackBtn = document.getElementById("mfaRecoveryBackBtn");
+    const mfaRecoveryError = document.getElementById("mfaRecoveryError");
+    const mfaRecoverySuccess = document.getElementById("mfaRecoverySuccess");
 
     function showError(message) {
         globalError.textContent =
@@ -42,6 +49,17 @@
 
     function clearMfaError() {
         mfaError.classList.add("hidden");
+    }
+
+    function showMfaRecoveryError(message) {
+        mfaRecoverySuccess.classList.add("hidden");
+        mfaRecoveryError.textContent = message || "Código de recuperação inválido.";
+        mfaRecoveryError.classList.remove("hidden");
+    }
+
+    function clearMfaRecoveryFeedback() {
+        mfaRecoveryError.classList.add("hidden");
+        mfaRecoverySuccess.classList.add("hidden");
     }
 
     function setLoading(loading) {
@@ -118,6 +136,48 @@
         redirectAfterAuth(result.data);
     }
 
+    function showMfaRecoveryStep() {
+        clearMfaError();
+        clearMfaRecoveryFeedback();
+        mfaSection.classList.add("hidden");
+        mfaRecoverySection.classList.remove("hidden");
+        mfaRecoveryCodeInput.focus();
+    }
+
+    async function handleMfaRecovery() {
+        clearMfaRecoveryFeedback();
+        const recoveryCode = mfaRecoveryCodeInput.value.trim().toUpperCase();
+        const normalized = recoveryCode.replace(/[\s-]/g, "");
+
+        if (!/^[A-HJ-NP-Z2-9]{16}$/.test(normalized)) {
+            showMfaRecoveryError("Introduza um código de recuperação válido.");
+            return;
+        }
+
+        mfaRecoverySubmitBtn.disabled = true;
+        mfaRecoverySubmitBtn.textContent = "A recuperar...";
+
+        const result = await api.post(
+            "/auth/recover-mfa",
+            { recovery_code: recoveryCode },
+            { skipSessionExpiredRedirect: true }
+        );
+
+        mfaRecoverySubmitBtn.disabled = false;
+        mfaRecoverySubmitBtn.textContent = "Recuperar acesso";
+
+        if (!result.success) {
+            showMfaRecoveryError(result.error);
+            return;
+        }
+
+        mfaRecoveryCodeInput.value = "";
+        mfaRecoverySuccess.textContent =
+            "Autenticador desvinculado. Inicie sessão novamente para configurar um novo.";
+        mfaRecoverySuccess.classList.remove("hidden");
+        setTimeout(() => redirectToLogin("?mfa=recovered"), 1500);
+    }
+
     const params = new URLSearchParams(location.search);
 
     if (params.get("registered") === "1") {
@@ -169,7 +229,24 @@
         window.location.href = AUTH_PATHS.login;
     });
 
+    showMfaRecoveryBtn?.addEventListener("click", showMfaRecoveryStep);
+    mfaRecoverySubmitBtn?.addEventListener("click", handleMfaRecovery);
+    mfaRecoveryBackBtn?.addEventListener("click", () => {
+        clearMfaRecoveryFeedback();
+        mfaRecoverySection.classList.add("hidden");
+        mfaSection.classList.remove("hidden");
+        mfaCodeInput.focus();
+    });
+
+    mfaRecoveryCodeInput?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            handleMfaRecovery();
+        }
+    });
+
     emailInput?.addEventListener("input", clearError);
     passwordInput?.addEventListener("input", clearError);
     mfaCodeInput?.addEventListener("input", clearMfaError);
+    mfaRecoveryCodeInput?.addEventListener("input", clearMfaRecoveryFeedback);
 })();

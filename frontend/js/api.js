@@ -86,6 +86,8 @@ function shouldAttemptRefresh(path, options = {}) {
         "/auth/verify-mfa",
         "/auth/enroll-mfa/setup",
         "/auth/enroll-mfa/confirm",
+        "/auth/enroll-mfa/complete",
+        "/auth/recover-mfa",
         "/auth/complete-registration",
         "/auth/password-reset/request",
         "/auth/password-reset/validate",

@@ -54,7 +54,30 @@
 
             <button type="button" id="confirmBtn"
                 class="w-full bg-blue-900 text-white py-3.5 rounded-xl font-bold uppercase tracking-wider hover:bg-blue-800 disabled:opacity-50">
-                Ativar MFA e entrar
+                Ativar MFA
+            </button>
+        </div>
+
+        <div id="recoveryCodeContent" class="hidden space-y-5">
+            <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                <p class="font-bold">Guarde este código de recuperação.</p>
+                <p class="mt-1">
+                    Ele será apresentado apenas uma vez e permite recuperar o acesso caso perca o autenticador.
+                </p>
+            </div>
+
+            <div class="rounded-xl border-2 border-blue-900 bg-slate-50 p-4 text-center">
+                <code id="recoveryCode" class="text-xl font-black tracking-widest text-blue-950"></code>
+            </div>
+
+            <button type="button" id="copyRecoveryCodeBtn"
+                class="w-full border-2 border-blue-900 text-blue-900 py-3 rounded-xl font-bold hover:bg-blue-50">
+                Copiar código
+            </button>
+
+            <button type="button" id="completeEnrollmentBtn"
+                class="w-full bg-blue-900 text-white py-3.5 rounded-xl font-bold uppercase tracking-wider hover:bg-blue-800 disabled:opacity-50">
+                Já guardei o código
             </button>
         </div>
 
