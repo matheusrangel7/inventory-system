@@ -36,15 +36,24 @@ def test_confirm_enrollment_commits_regular_mfa_setup(monkeypatch):
         lambda user_id, code: (True, "MFA ativado com sucesso."),
     )
     monkeypatch.setattr(
+        mfa_enrollment_service.mfa_recovery_service,
+        "apply_recovery_code",
+        lambda user_id: "ABCD-EFGH-JKLM-NPQR",
+    )
+    monkeypatch.setattr(
         mfa_enrollment_service.admin_transfer_service,
         "has_pending_for_target",
         lambda user_id: False,
     )
 
-    ok, message = mfa_enrollment_service.confirm_enrollment(2, "123456")
+    ok, message, recovery_code = mfa_enrollment_service.confirm_enrollment(
+        2,
+        "123456",
+    )
 
     assert ok
     assert message == "MFA ativado com sucesso."
+    assert recovery_code == "ABCD-EFGH-JKLM-NPQR"
     assert session.commits == 1
     assert session.rollbacks == 0
 
@@ -69,6 +78,11 @@ def test_confirm_enrollment_commits_transfer_before_notifications(monkeypatch):
         lambda user_id, code: (True, "MFA ativado com sucesso."),
     )
     monkeypatch.setattr(
+        mfa_enrollment_service.mfa_recovery_service,
+        "apply_recovery_code",
+        lambda user_id: "ABCD-EFGH-JKLM-NPQR",
+    )
+    monkeypatch.setattr(
         mfa_enrollment_service.admin_transfer_service,
         "has_pending_for_target",
         lambda user_id: True,
@@ -90,9 +104,13 @@ def test_confirm_enrollment_commits_transfer_before_notifications(monkeypatch):
         lambda result: events.append(("notify", result)),
     )
 
-    ok, _ = mfa_enrollment_service.confirm_enrollment(2, "123456")
+    ok, _, recovery_code = mfa_enrollment_service.confirm_enrollment(
+        2,
+        "123456",
+    )
 
     assert ok
+    assert recovery_code == "ABCD-EFGH-JKLM-NPQR"
     assert events == ["commit", ("notify", completion)]
     assert session.rollbacks == 0
 
@@ -100,9 +118,17 @@ def test_confirm_enrollment_commits_transfer_before_notifications(monkeypatch):
 def test_confirm_enrollment_rolls_back_mfa_when_transfer_cannot_complete(
     monkeypatch,
 ):
-    user = SimpleNamespace(mfa_enabled=False)
+    user = SimpleNamespace(
+        mfa_enabled=False,
+        mfa_recovery_code_hash=None,
+    )
+
+    def rollback_mfa_changes():
+        user.mfa_enabled = False
+        user.mfa_recovery_code_hash = None
+
     session = FakeSession(
-        rollback_effect=lambda: setattr(user, "mfa_enabled", False),
+        rollback_effect=rollback_mfa_changes,
     )
     monkeypatch.setattr(
         mfa_enrollment_service,
@@ -118,6 +144,15 @@ def test_confirm_enrollment_rolls_back_mfa_when_transfer_cannot_complete(
         mfa_enrollment_service.mfa_service,
         "apply_mfa_setup_confirmation",
         apply_mfa,
+    )
+    def apply_recovery_code(user_id):
+        user.mfa_recovery_code_hash = "argon-hash"
+        return "ABCD-EFGH-JKLM-NPQR"
+
+    monkeypatch.setattr(
+        mfa_enrollment_service.mfa_recovery_service,
+        "apply_recovery_code",
+        apply_recovery_code,
     )
     monkeypatch.setattr(
         mfa_enrollment_service.admin_transfer_service,
@@ -137,11 +172,16 @@ def test_confirm_enrollment_rolls_back_mfa_when_transfer_cannot_complete(
         ),
     )
 
-    ok, message = mfa_enrollment_service.confirm_enrollment(2, "123456")
+    ok, message, recovery_code = mfa_enrollment_service.confirm_enrollment(
+        2,
+        "123456",
+    )
 
     assert not ok
     assert message == mfa_enrollment_service.TRANSFER_COMPLETION_ERROR
+    assert recovery_code is None
     assert user.mfa_enabled is False
+    assert user.mfa_recovery_code_hash is None
     assert session.commits == 0
     assert session.rollbacks == 1
 
@@ -159,10 +199,14 @@ def test_confirm_enrollment_rolls_back_invalid_mfa_attempt(monkeypatch):
         lambda user_id, code: (False, "Código inválido."),
     )
 
-    ok, message = mfa_enrollment_service.confirm_enrollment(2, "invalid")
+    ok, message, recovery_code = mfa_enrollment_service.confirm_enrollment(
+        2,
+        "invalid",
+    )
 
     assert not ok
     assert message == "Código inválido."
+    assert recovery_code is None
     assert session.commits == 0
     assert session.rollbacks == 1
 
@@ -180,6 +224,11 @@ def test_confirm_enrollment_rolls_back_database_error(monkeypatch):
         lambda user_id, code: (True, "MFA ativado com sucesso."),
     )
     monkeypatch.setattr(
+        mfa_enrollment_service.mfa_recovery_service,
+        "apply_recovery_code",
+        lambda user_id: "ABCD-EFGH-JKLM-NPQR",
+    )
+    monkeypatch.setattr(
         mfa_enrollment_service.admin_transfer_service,
         "has_pending_for_target",
         lambda user_id: True,
@@ -192,10 +241,14 @@ def test_confirm_enrollment_rolls_back_database_error(monkeypatch):
         ),
     )
 
-    ok, message = mfa_enrollment_service.confirm_enrollment(2, "123456")
+    ok, message, recovery_code = mfa_enrollment_service.confirm_enrollment(
+        2,
+        "123456",
+    )
 
     assert not ok
     assert message == mfa_enrollment_service.TRANSFER_COMPLETION_ERROR
+    assert recovery_code is None
     assert session.commits == 0
     assert session.rollbacks == 1
 
@@ -216,15 +269,24 @@ def test_confirm_enrollment_reports_regular_mfa_commit_failure(monkeypatch):
         lambda user_id, code: (True, "MFA ativado com sucesso."),
     )
     monkeypatch.setattr(
+        mfa_enrollment_service.mfa_recovery_service,
+        "apply_recovery_code",
+        lambda user_id: "ABCD-EFGH-JKLM-NPQR",
+    )
+    monkeypatch.setattr(
         mfa_enrollment_service.admin_transfer_service,
         "has_pending_for_target",
         lambda user_id: False,
     )
 
-    ok, message = mfa_enrollment_service.confirm_enrollment(2, "123456")
+    ok, message, recovery_code = mfa_enrollment_service.confirm_enrollment(
+        2,
+        "123456",
+    )
 
     assert not ok
     assert message == mfa_enrollment_service.MFA_CONFIRMATION_ERROR
+    assert recovery_code is None
     assert session.commits == 0
     assert session.rollbacks == 1
 
@@ -248,6 +310,11 @@ def test_confirm_enrollment_succeeds_when_post_commit_effects_fail(monkeypatch):
         lambda user_id, code: (True, "MFA ativado com sucesso."),
     )
     monkeypatch.setattr(
+        mfa_enrollment_service.mfa_recovery_service,
+        "apply_recovery_code",
+        lambda user_id: "ABCD-EFGH-JKLM-NPQR",
+    )
+    monkeypatch.setattr(
         mfa_enrollment_service.admin_transfer_service,
         "has_pending_for_target",
         lambda user_id: True,
@@ -266,9 +333,13 @@ def test_confirm_enrollment_succeeds_when_post_commit_effects_fail(monkeypatch):
         fail_notifications,
     )
 
-    ok, message = mfa_enrollment_service.confirm_enrollment(2, "123456")
+    ok, message, recovery_code = mfa_enrollment_service.confirm_enrollment(
+        2,
+        "123456",
+    )
 
     assert ok
     assert message == "MFA ativado com sucesso."
+    assert recovery_code == "ABCD-EFGH-JKLM-NPQR"
     assert session.commits == 1
     assert session.rollbacks == 0
