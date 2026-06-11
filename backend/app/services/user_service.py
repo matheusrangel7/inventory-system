@@ -235,6 +235,7 @@ def _reset_completed_gestor_for_invite(user: User) -> None:
     del random_password
     user.totp_secret = None
     user.mfa_enabled = False
+    user.mfa_recovery_code_hash = None
 
 
 def _is_completed_registration_email_change(user: User, email: str) -> bool:

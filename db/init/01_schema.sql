@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
     registration_token_expires_at TIMESTAMPTZ,
     totp_secret VARCHAR(64),
     mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    mfa_recovery_code_hash VARCHAR(255),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
