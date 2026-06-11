@@ -3,6 +3,8 @@ const AUTH_PATHS = {
     sessionExpired: "/sessao-expirada",
     enrollMfa: "/configurar-mfa",
     register: "/primeiro-acesso",
+    forgotPassword: "/recuperar-palavra-passe",
+    resetPassword: "/redefinir-palavra-passe",
     adminDashboard: "/painel/admin",
     gestorDashboard: "/painel/gestor",
 };
