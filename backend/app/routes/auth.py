@@ -1,6 +1,8 @@
 import io
 import base64
 import hmac
+import secrets
+import time
 import qrcode
 
 from flask import Blueprint, current_app, g, make_response, request
@@ -27,6 +29,8 @@ from app.constants import (
     LOGIN_RATE_LIMIT,
     PASSWORD_RESET_COMPLETE_RATE_LIMIT,
     PASSWORD_RESET_REQUEST_RATE_LIMIT,
+    PASSWORD_RESET_RESPONSE_JITTER_MILLISECONDS,
+    PASSWORD_RESET_RESPONSE_MIN_SECONDS,
     PASSWORD_RESET_VALIDATE_RATE_LIMIT,
     REFRESH_CSRF_COOKIE_NAME,
     REFRESH_TOKEN_COOKIE_NAME,
@@ -71,6 +75,16 @@ def _get_user_id_from_claims(claims: dict) -> int | None:
         return None
 
 
+def _delay_password_reset_response(started_at: float) -> None:
+    jitter_seconds = (
+        secrets.randbelow(PASSWORD_RESET_RESPONSE_JITTER_MILLISECONDS + 1) / 1000
+    )
+    target_duration = PASSWORD_RESET_RESPONSE_MIN_SECONDS + jitter_seconds
+    remaining = target_duration - (time.monotonic() - started_at)
+    if remaining > 0:
+        time.sleep(remaining)
+
+
 @auth_bp.route("/password-reset/request", methods=["POST"])
 @limiter.limit(PASSWORD_RESET_REQUEST_RATE_LIMIT)
 def request_password_reset():
@@ -80,7 +94,12 @@ def request_password_reset():
     if not email:
         return error("Email obrigatório.", status=400)
 
-    message = password_reset_service.request_password_reset(email)
+    started_at = time.monotonic()
+    try:
+        message = password_reset_service.request_password_reset(email)
+    finally:
+        _delay_password_reset_response(started_at)
+
     return success(message=message)
 
 

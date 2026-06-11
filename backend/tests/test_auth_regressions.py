@@ -35,6 +35,59 @@ def test_enroll_mfa_setup_rejects_invalid_step_subject(monkeypatch):
     )
 
 
+def test_password_reset_response_delay_uses_minimum_and_jitter(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(auth.secrets, "randbelow", lambda upper: 100)
+    monkeypatch.setattr(auth.time, "monotonic", lambda: 10.2)
+    monkeypatch.setattr(auth.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    auth._delay_password_reset_response(started_at=10.0)
+
+    assert sleeps == [pytest.approx(0.2)]
+
+
+def test_password_reset_response_delay_does_not_sleep_past_target(monkeypatch):
+    monkeypatch.setattr(auth.secrets, "randbelow", lambda upper: 0)
+    monkeypatch.setattr(auth.time, "monotonic", lambda: 10.5)
+    monkeypatch.setattr(
+        auth.time,
+        "sleep",
+        lambda seconds: pytest.fail("completed requests must not sleep"),
+    )
+
+    auth._delay_password_reset_response(started_at=10.0)
+
+
+def test_password_reset_request_applies_delay_after_service(monkeypatch):
+    app = make_app()
+    calls = []
+    monkeypatch.setattr(
+        auth.password_reset_service,
+        "request_password_reset",
+        lambda email: calls.append(("service", email)) or "Resposta genérica.",
+    )
+    monkeypatch.setattr(auth.time, "monotonic", lambda: 42.0)
+    monkeypatch.setattr(
+        auth,
+        "_delay_password_reset_response",
+        lambda started_at: calls.append(("delay", started_at)),
+    )
+
+    with app.test_request_context(
+        "/api/auth/password-reset/request",
+        method="POST",
+        json={"email": "UTILIZADOR@UBI.PT"},
+    ):
+        response, status = auth.request_password_reset.__wrapped__()
+
+    assert status == 200
+    assert response.get_json()["message"] == "Resposta genérica."
+    assert calls == [
+        ("service", "utilizador@ubi.pt"),
+        ("delay", 42.0),
+    ]
+
+
 def test_enroll_mfa_confirm_completes_pending_admin_transfer(monkeypatch):
     app = make_app()
     calls = {}
