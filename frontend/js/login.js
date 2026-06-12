@@ -7,6 +7,7 @@
     const passwordInput = document.getElementById("password");
     const globalError = document.getElementById("globalError");
     const registerSuccess = document.getElementById("registerSuccess");
+    const passwordChangedSuccess = document.getElementById("passwordChangedSuccess");
     const submitBtn = document.getElementById("submitBtn");
     const btnSpinner = document.getElementById("btnSpinner");
     const btnText = document.getElementById("btnText");
@@ -182,6 +183,10 @@
 
     if (params.get("registered") === "1") {
         registerSuccess?.classList.remove("hidden");
+    }
+
+    if (params.get("password") === "changed") {
+        passwordChangedSuccess?.classList.remove("hidden");
     }
 
     if (params.get("session") === "expired") {
