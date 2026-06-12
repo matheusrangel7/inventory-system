@@ -23,6 +23,9 @@ MFA_STEP_COOKIE_NAME = "mfa_step"
 MFA_STEP_COOKIE_PATH = "/api/auth"
 MFA_RECOVERY_CODE_LENGTH = 16
 MFA_RECOVERY_RATE_LIMIT = "5 per minute"
+MFA_RECONFIGURATION_RATE_LIMIT = "5 per minute"
+MFA_RECONFIGURATION_STEP_COOKIE_NAME = "mfa_reconfiguration_step"
+MFA_RECONFIGURATION_STEP_COOKIE_PATH = "/api/auth/mfa-reconfiguration"
 
 # Cookies
 REFRESH_TOKEN_COOKIE_NAME = "refresh_token"

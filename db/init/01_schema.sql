@@ -51,6 +51,15 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS mfa_reconfigurations (
+    reconfiguration_id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL UNIQUE,
+    pending_totp_secret VARCHAR(64) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMPTZ NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS pending_admin_transfer (
     transfer_id SERIAL PRIMARY KEY,
     initiated_by INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
