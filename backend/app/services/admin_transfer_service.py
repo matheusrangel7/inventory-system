@@ -3,15 +3,18 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+import pyotp
+from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from app.constants import MFA_VALID_WINDOW
 from app.domain.enums import AdminTransferStatus, RegistrationStatus, UserRole
-from app.extensions import db
+from app.extensions import db, ph
 from app.models.admin_transfer import PendingAdminTransfer
 from app.models.location import Location
 from app.models.user import User
-from app.services import auth_service, email_service, session_service, user_service
+from app.services import email_service, session_service, user_service
 from app.services.registration_token_service import (
     clear_registration_token,
     issue_registration_token,
@@ -20,6 +23,7 @@ from app.services.registration_token_service import (
 from app.utils.audit import log_action
 
 logger = logging.getLogger(__name__)
+INVALID_CONFIRMATION_MESSAGE = "Credenciais de confirmação inválidas."
 
 
 @dataclass(frozen=True)
@@ -55,11 +59,42 @@ def _resolved_transfer_value(transfer: PendingAdminTransfer, event: str) -> dict
     }
 
 
-def _verify_transfer_password(
+def _confirm_transfer_credentials(
     current_admin_id: int,
     password: str,
-) -> tuple[bool, str]:
-    return auth_service.verify_password(current_admin_id, password)
+    totp_code: str,
+) -> tuple[bool, str, User | None]:
+    current = db.session.execute(
+        select(User)
+        .where(User.user_id == current_admin_id)
+        .with_for_update()
+    ).scalar_one_or_none()
+
+    if (
+        not current
+        or not current.is_active
+        or current.registration_status != RegistrationStatus.COMPLETED
+        or current.role != UserRole.ADMINISTRATOR
+        or not current.mfa_enabled
+        or not current.totp_secret
+    ):
+        db.session.rollback()
+        return False, INVALID_CONFIRMATION_MESSAGE, None
+
+    try:
+        password_valid = ph.verify(current.password_hash, password)
+    except (VerifyMismatchError, VerificationError, InvalidHashError):
+        password_valid = False
+
+    totp_valid = pyotp.TOTP(current.totp_secret).verify(
+        totp_code,
+        valid_window=MFA_VALID_WINDOW,
+    )
+    if not password_valid or not totp_valid:
+        db.session.rollback()
+        return False, INVALID_CONFIRMATION_MESSAGE, None
+
+    return True, "Credenciais confirmadas.", current
 
 
 def get_pending_transfer() -> dict | None:
@@ -158,29 +193,25 @@ def transfer_to_existing_admin(
     current_admin_id: int,
     target_user_id: int,
     password: str,
+    totp_code: str,
 ) -> tuple[bool, str]:
-    ok, message = _verify_transfer_password(current_admin_id, password)
-    if not ok:
-        return False, message
-
     ok, message = _ensure_no_pending_transfer()
     if not ok:
         return False, message
 
-    current = db.session.execute(
-        select(User)
-        .where(User.user_id == current_admin_id)
-        .with_for_update()
-    ).scalar_one_or_none()
+    ok, message, current = _confirm_transfer_credentials(
+        current_admin_id,
+        password,
+        totp_code,
+    )
+    if not ok:
+        return False, message
+
     target = db.session.execute(
         select(User).where(User.user_id == target_user_id).with_for_update()
     ).scalar_one_or_none()
 
-    if (
-        not current
-        or not current.is_active
-        or current.role != UserRole.ADMINISTRATOR
-    ):
+    if not current:
         return False, "Administrador atual inválido."
     if not target or not target.is_active:
         return False, "Utilizador alvo inválido."
@@ -245,25 +276,21 @@ def start_transfer_to_new_admin(
     current_admin_id: int,
     email: str,
     password: str,
+    totp_code: str,
 ) -> tuple[bool, str, dict | None]:
-    ok, message = _verify_transfer_password(current_admin_id, password)
-    if not ok:
-        return False, message, None
-
     ok, message = _ensure_no_pending_transfer()
     if not ok:
         return False, message, None
 
-    current = db.session.execute(
-        select(User)
-        .where(User.user_id == current_admin_id)
-        .with_for_update()
-    ).scalar_one_or_none()
-    if (
-        not current
-        or current.role != UserRole.ADMINISTRATOR
-        or not current.is_active
-    ):
+    ok, message, current = _confirm_transfer_credentials(
+        current_admin_id,
+        password,
+        totp_code,
+    )
+    if not ok:
+        return False, message, None
+
+    if not current:
         return False, "Administrador atual inválido.", None
 
     existing = db.session.execute(
