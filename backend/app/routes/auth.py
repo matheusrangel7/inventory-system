@@ -11,6 +11,7 @@ from flask_jwt_extended import get_jwt
 from app.services import (
     auth_service,
     mfa_enrollment_service,
+    mfa_reconfiguration_service,
     mfa_recovery_service,
     mfa_service,
     password_change_service,
@@ -23,6 +24,9 @@ from app.utils.cookie_helpers import (
     set_mfa_step_cookie,
     get_mfa_step_claims,
     clear_mfa_step_cookie,
+    set_mfa_reconfiguration_step_cookie,
+    get_mfa_reconfiguration_step_claims,
+    clear_mfa_reconfiguration_step_cookie,
     build_refresh_csrf_token,
     set_password_change_step_cookie,
     get_password_change_step_claims,
@@ -34,6 +38,7 @@ from app.constants import (
     CSRF_HEADER_NAME,
     LOGIN_RATE_LIMIT,
     MFA_RECOVERY_RATE_LIMIT,
+    MFA_RECONFIGURATION_RATE_LIMIT,
     PASSWORD_CHANGE_RATE_LIMIT,
     PASSWORD_RESET_COMPLETE_RATE_LIMIT,
     PASSWORD_RESET_REQUEST_RATE_LIMIT,
@@ -81,6 +86,27 @@ def _get_user_id_from_claims(claims: dict) -> int | None:
         return int(claims["sub"])
     except (KeyError, TypeError, ValueError):
         return None
+
+
+def _get_int_claim(claims: dict, claim_name: str) -> int | None:
+    try:
+        return int(claims[claim_name])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _qr_code_data_uri(value: str) -> str:
+    image = qrcode.make(value)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    encoded = base64.b64encode(buffer.getvalue()).decode()
+    return f"data:image/png;base64,{encoded}"
+
+
+def _prevent_sensitive_response_caching(response):
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return response
 
 
 def _delay_password_reset_response(started_at: float) -> None:
@@ -210,6 +236,109 @@ def complete_password_change():
     return clear_password_change_step_cookie(response)
 
 
+@auth_bp.route("/mfa-reconfiguration/start", methods=["POST"])
+@limiter.limit(MFA_RECONFIGURATION_RATE_LIMIT)
+@authenticated_user_required
+def start_mfa_reconfiguration():
+    data = request.get_json(silent=True) or {}
+    current_password = data.get("current_password", "")
+    if not isinstance(current_password, str):
+        current_password = ""
+    current_totp_code = str(data.get("totp_code", "")).strip()
+
+    ok, message, setup = mfa_reconfiguration_service.start_reconfiguration(
+        g.current_user.user_id,
+        current_password,
+        current_totp_code,
+    )
+    if not ok or setup is None:
+        return error(message, status=400)
+
+    response = make_response(
+        success(
+            data={"qr_code": _qr_code_data_uri(setup.otp_uri)},
+            message=message,
+        )
+    )
+    _prevent_sensitive_response_caching(response)
+    return set_mfa_reconfiguration_step_cookie(
+        response,
+        g.current_user.user_id,
+        setup.reconfiguration_id,
+        setup.password_fingerprint,
+        setup.totp_fingerprint,
+        get_jwt()["jti"],
+    )
+
+
+@auth_bp.route("/mfa-reconfiguration/complete", methods=["POST"])
+@limiter.limit(MFA_RECONFIGURATION_RATE_LIMIT)
+@authenticated_user_required
+def complete_mfa_reconfiguration():
+    claims = get_mfa_reconfiguration_step_claims() or {}
+    step_user_id = _get_user_id_from_claims(claims)
+    reconfiguration_id = _get_int_claim(claims, "reconfiguration_id")
+    password_fingerprint = claims.get("password_fingerprint")
+    totp_fingerprint = claims.get("totp_fingerprint")
+    step_access_jti = claims.get("access_jti")
+    current_access_jti = get_jwt().get("jti")
+
+    if (
+        step_user_id != g.current_user.user_id
+        or reconfiguration_id is None
+        or not isinstance(password_fingerprint, str)
+        or not isinstance(totp_fingerprint, str)
+        or not isinstance(step_access_jti, str)
+        or not isinstance(current_access_jti, str)
+        or not hmac.compare_digest(step_access_jti, current_access_jti)
+    ):
+        response = make_response(
+            error(mfa_reconfiguration_service.INVALID_STEP_MESSAGE, status=400)
+        )
+        return clear_mfa_reconfiguration_step_cookie(response)
+
+    data = request.get_json(silent=True) or {}
+    new_totp_code = str(data.get("totp_code", "")).strip()
+    ok, message, recovery_code, step_valid = (
+        mfa_reconfiguration_service.complete_reconfiguration(
+            g.current_user.user_id,
+            reconfiguration_id,
+            new_totp_code,
+            password_fingerprint,
+            totp_fingerprint,
+        )
+    )
+    if not ok:
+        response = make_response(error(message, status=400))
+        if not step_valid:
+            clear_mfa_reconfiguration_step_cookie(response)
+        return response
+
+    response = make_response(
+        success(
+            data={"recovery_code": recovery_code},
+            message=message,
+        )
+    )
+    _prevent_sensitive_response_caching(response)
+    clear_auth_cookies(response)
+    clear_mfa_step_cookie(response)
+    return clear_mfa_reconfiguration_step_cookie(response)
+
+
+@auth_bp.route("/mfa-reconfiguration/cancel", methods=["POST"])
+@limiter.limit(MFA_RECONFIGURATION_RATE_LIMIT)
+@authenticated_user_required
+def cancel_mfa_reconfiguration():
+    ok, message = mfa_reconfiguration_service.cancel_reconfiguration(
+        g.current_user.user_id
+    )
+    response = make_response(
+        success(message=message) if ok else error(message, status=400)
+    )
+    return clear_mfa_reconfiguration_step_cookie(response)
+
+
 @auth_bp.route("/login", methods=["POST"])
 @limiter.limit(LOGIN_RATE_LIMIT)
 def login():
@@ -268,12 +397,7 @@ def enroll_mfa_setup():
     if not ok:
         return error(message, status=400)
 
-    img = qrcode.make(otp_uri)
-    buffer = io.BytesIO()
-    img.save(buffer, format="PNG")
-    qr_b64 = base64.b64encode(buffer.getvalue()).decode()
-
-    return success(data={"qr_code": f"data:image/png;base64,{qr_b64}"})
+    return success(data={"qr_code": _qr_code_data_uri(otp_uri)})
 
 
 @auth_bp.route("/enroll-mfa/confirm", methods=["POST"])
