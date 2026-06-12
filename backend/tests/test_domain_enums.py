@@ -1,5 +1,6 @@
 from app.domain.enums import AdminTransferStatus, RegistrationStatus, UserRole
 from app.models.user import User
+from app.models.mfa_reconfiguration import MfaReconfiguration
 
 
 def test_domain_enums_preserve_persisted_values():
@@ -23,3 +24,11 @@ def test_user_model_uses_existing_postgresql_enum_values():
         "Concluído",
     ]
     assert User.__table__.c.mfa_recovery_code_hash.type.length == 255
+
+
+def test_mfa_reconfiguration_model_has_one_pending_setup_per_user():
+    table = MfaReconfiguration.__table__
+    assert table.c.user_id.unique
+    assert not table.c.pending_totp_secret.nullable
+    assert table.c.pending_totp_secret.type.length == 64
+    assert not table.c.expires_at.nullable

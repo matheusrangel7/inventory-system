@@ -21,6 +21,8 @@ from app.constants import (
     REFRESH_CSRF_COOKIE_NAME,
     MFA_STEP_COOKIE_NAME,
     MFA_STEP_COOKIE_PATH,
+    MFA_RECONFIGURATION_STEP_COOKIE_NAME,
+    MFA_RECONFIGURATION_STEP_COOKIE_PATH,
     PASSWORD_CHANGE_STEP_COOKIE_NAME,
     PASSWORD_CHANGE_STEP_COOKIE_PATH,
     STEP_TOKEN_MINUTES,
@@ -98,6 +100,10 @@ def clear_auth_cookies(response):
     response.delete_cookie(
         PASSWORD_CHANGE_STEP_COOKIE_NAME,
         path=PASSWORD_CHANGE_STEP_COOKIE_PATH,
+    )
+    response.delete_cookie(
+        MFA_RECONFIGURATION_STEP_COOKIE_NAME,
+        path=MFA_RECONFIGURATION_STEP_COOKIE_PATH,
     )
     return response
 
@@ -210,5 +216,60 @@ def get_password_change_step_claims():
         claims
         if claims.get("token_use") == "password_change_step"
         and claims.get("password_change_confirmed") is True
+        else None
+    )
+
+
+def set_mfa_reconfiguration_step_cookie(
+    response,
+    user_id: int,
+    reconfiguration_id: int,
+    password_fingerprint: str,
+    totp_fingerprint: str,
+    access_jti: str,
+):
+    token = create_access_token(
+        identity=str(user_id),
+        additional_claims={
+            "token_use": "mfa_reconfiguration_step",
+            "reconfiguration_id": reconfiguration_id,
+            "password_fingerprint": password_fingerprint,
+            "totp_fingerprint": totp_fingerprint,
+            "access_jti": access_jti,
+        },
+        expires_delta=timedelta(minutes=STEP_TOKEN_MINUTES),
+    )
+    secure = current_app.config.get("JWT_COOKIE_SECURE", True)
+    response.set_cookie(
+        MFA_RECONFIGURATION_STEP_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=secure,
+        samesite="Strict",
+        max_age=STEP_TOKEN_MINUTES * 60,
+        path=MFA_RECONFIGURATION_STEP_COOKIE_PATH,
+    )
+    return response
+
+
+def clear_mfa_reconfiguration_step_cookie(response):
+    response.delete_cookie(
+        MFA_RECONFIGURATION_STEP_COOKIE_NAME,
+        path=MFA_RECONFIGURATION_STEP_COOKIE_PATH,
+    )
+    return response
+
+
+def get_mfa_reconfiguration_step_claims():
+    token = request.cookies.get(MFA_RECONFIGURATION_STEP_COOKIE_NAME)
+    if not token:
+        return None
+    try:
+        claims = decode_token(token)
+    except PyJWTError:
+        return None
+    return (
+        claims
+        if claims.get("token_use") == "mfa_reconfiguration_step"
         else None
     )
