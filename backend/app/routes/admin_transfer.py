@@ -35,11 +35,16 @@ def transfer_existing():
 
     target_user_id = data.get("target_user_id")
     password = data.get("password", "")
+    totp_code = str(data.get("totp_code") or "").strip()
 
     if not target_user_id:
         return error("target_user_id obrigatório.", status=400)
     if not password:
         return error("Password obrigatória.", status=400)
+    if not totp_code:
+        return error("Código TOTP obrigatório.", status=400)
+    if not totp_code.isdigit() or len(totp_code) != 6:
+        return error("Código TOTP deve conter 6 dígitos.", status=400)
 
     try:
         target_user_id = int(target_user_id)
@@ -51,6 +56,7 @@ def transfer_existing():
         current_admin_id=current_admin_id,
         target_user_id=target_user_id,
         password=password,
+        totp_code=totp_code,
     )
     if not ok:
         return error(message, status=400)
@@ -67,17 +73,23 @@ def transfer_new():
 
     email = (data.get("email") or "").strip().lower()
     password = data.get("password", "")
+    totp_code = str(data.get("totp_code") or "").strip()
 
     if not email:
         return error("Email obrigatório.", status=400)
     if not password:
         return error("Password obrigatória.", status=400)
+    if not totp_code:
+        return error("Código TOTP obrigatório.", status=400)
+    if not totp_code.isdigit() or len(totp_code) != 6:
+        return error("Código TOTP deve conter 6 dígitos.", status=400)
 
     current_admin_id = get_current_user_id()
     ok, message, pending = admin_transfer_service.start_transfer_to_new_admin(
         current_admin_id=current_admin_id,
         email=email,
         password=password,
+        totp_code=totp_code,
     )
     if not ok:
         return error(message, status=400)

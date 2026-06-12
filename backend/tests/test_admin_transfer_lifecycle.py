@@ -1,6 +1,8 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from app.domain.enums import AdminTransferStatus, RegistrationStatus, UserRole
 from app.services import admin_transfer_service
 
@@ -23,9 +25,12 @@ class FakeSession:
     def __init__(self, results, *, users=None):
         self.results = iter(results)
         self.users = users or {}
+        self.statements = []
         self.committed = False
+        self.rolled_back = False
 
     def execute(self, statement):
+        self.statements.append(statement)
         return FakeResult(next(self.results))
 
     def get(self, model, key):
@@ -41,7 +46,7 @@ class FakeSession:
         self.committed = True
 
     def rollback(self):
-        return None
+        self.rolled_back = True
 
 
 def make_transfer():
@@ -52,6 +57,170 @@ def make_transfer():
         status=AdminTransferStatus.PENDING,
         resolved_at=None,
     )
+
+
+def make_current_admin(**overrides):
+    values = {
+        "user_id": 1,
+        "email": "old.admin@ubi.pt",
+        "password_hash": "password-hash",
+        "totp_secret": "totp-secret",
+        "mfa_enabled": True,
+        "is_active": True,
+        "role": UserRole.ADMINISTRATOR,
+        "registration_status": RegistrationStatus.COMPLETED,
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def test_transfer_confirmation_verifies_password_totp_and_locks_admin(monkeypatch):
+    current = make_current_admin()
+    session = FakeSession([current])
+    password_checks = []
+    totp_checks = []
+
+    monkeypatch.setattr(admin_transfer_service, "db", SimpleNamespace(session=session))
+    monkeypatch.setattr(
+        admin_transfer_service,
+        "ph",
+        SimpleNamespace(
+            verify=lambda stored_hash, password: (
+                password_checks.append((stored_hash, password)) or True
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        admin_transfer_service.pyotp,
+        "TOTP",
+        lambda secret: SimpleNamespace(
+            verify=lambda code, valid_window: (
+                totp_checks.append((secret, code, valid_window)) or True
+            )
+        ),
+    )
+
+    ok, message, user = admin_transfer_service._confirm_transfer_credentials(
+        current.user_id,
+        "valid-password",
+        "123456",
+    )
+
+    assert ok
+    assert message == "Credenciais confirmadas."
+    assert user is current
+    assert password_checks == [("password-hash", "valid-password")]
+    assert totp_checks == [
+        ("totp-secret", "123456", admin_transfer_service.MFA_VALID_WINDOW)
+    ]
+    assert session.statements[0]._for_update_arg is not None
+    assert not session.rolled_back
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"is_active": False},
+        {"registration_status": RegistrationStatus.PENDING},
+        {"role": UserRole.MANAGER},
+        {"mfa_enabled": False},
+        {"totp_secret": None},
+    ],
+)
+def test_transfer_confirmation_rejects_invalid_admin_state(monkeypatch, overrides):
+    session = FakeSession([make_current_admin(**overrides)])
+    monkeypatch.setattr(admin_transfer_service, "db", SimpleNamespace(session=session))
+
+    ok, message, user = admin_transfer_service._confirm_transfer_credentials(
+        1,
+        "valid-password",
+        "123456",
+    )
+
+    assert not ok
+    assert message == admin_transfer_service.INVALID_CONFIRMATION_MESSAGE
+    assert user is None
+    assert session.rolled_back
+
+
+@pytest.mark.parametrize(
+    ("password_valid", "totp_valid"),
+    [(False, True), (True, False), (False, False)],
+)
+def test_transfer_confirmation_uses_generic_error_for_invalid_factor(
+    monkeypatch,
+    password_valid,
+    totp_valid,
+):
+    session = FakeSession([make_current_admin()])
+    monkeypatch.setattr(admin_transfer_service, "db", SimpleNamespace(session=session))
+    monkeypatch.setattr(
+        admin_transfer_service,
+        "ph",
+        SimpleNamespace(verify=lambda stored_hash, password: password_valid),
+    )
+    monkeypatch.setattr(
+        admin_transfer_service.pyotp,
+        "TOTP",
+        lambda secret: SimpleNamespace(
+            verify=lambda code, valid_window: totp_valid
+        ),
+    )
+
+    ok, message, user = admin_transfer_service._confirm_transfer_credentials(
+        1,
+        "submitted-password",
+        "123456",
+    )
+
+    assert not ok
+    assert message == admin_transfer_service.INVALID_CONFIRMATION_MESSAGE
+    assert user is None
+    assert session.rolled_back
+
+
+@pytest.mark.parametrize("mode", ["existing", "new"])
+def test_invalid_confirmation_stops_both_transfer_flows(monkeypatch, mode):
+    session = FakeSession([None])
+    monkeypatch.setattr(admin_transfer_service, "db", SimpleNamespace(session=session))
+    monkeypatch.setattr(
+        admin_transfer_service,
+        "_confirm_transfer_credentials",
+        lambda *args: (
+            False,
+            admin_transfer_service.INVALID_CONFIRMATION_MESSAGE,
+            None,
+        ),
+    )
+    monkeypatch.setattr(
+        admin_transfer_service.user_service,
+        "create_pending_gestor",
+        lambda *args, **kwargs: pytest.fail("user must not be created"),
+    )
+
+    if mode == "existing":
+        result = admin_transfer_service.transfer_to_existing_admin(
+            current_admin_id=1,
+            target_user_id=2,
+            password="invalid-password",
+            totp_code="123456",
+        )
+        assert result == (
+            False,
+            admin_transfer_service.INVALID_CONFIRMATION_MESSAGE,
+        )
+    else:
+        result = admin_transfer_service.start_transfer_to_new_admin(
+            current_admin_id=1,
+            email="new.admin@ubi.pt",
+            password="invalid-password",
+            totp_code="123456",
+        )
+        assert result == (
+            False,
+            admin_transfer_service.INVALID_CONFIRMATION_MESSAGE,
+            None,
+        )
 
 
 def test_cancel_pending_transfer_marks_transfer_cancelled(monkeypatch):
@@ -146,6 +315,7 @@ def test_complete_pending_transfer_marks_transfer_completed(monkeypatch):
 
 def test_existing_admin_transfer_notifies_only_after_commit(monkeypatch):
     events = []
+    audit_calls = []
     current = SimpleNamespace(
         user_id=1,
         email="old.admin@ubi.pt",
@@ -160,14 +330,14 @@ def test_existing_admin_transfer_notifies_only_after_commit(monkeypatch):
         registration_status=RegistrationStatus.COMPLETED,
         mfa_enabled=True,
     )
-    session = FakeSession([None, current, target])
+    session = FakeSession([None, target])
     session.commit = lambda: events.append("commit")
 
     monkeypatch.setattr(admin_transfer_service, "db", SimpleNamespace(session=session))
     monkeypatch.setattr(
         admin_transfer_service,
-        "_verify_transfer_password",
-        lambda *args: (True, "Senha válida."),
+        "_confirm_transfer_credentials",
+        lambda *args: (True, "Credenciais confirmadas.", current),
     )
     monkeypatch.setattr(
         admin_transfer_service,
@@ -177,7 +347,7 @@ def test_existing_admin_transfer_notifies_only_after_commit(monkeypatch):
     monkeypatch.setattr(
         admin_transfer_service,
         "log_action",
-        lambda *args, **kwargs: None,
+        lambda *args, **kwargs: audit_calls.append((args, kwargs)),
     )
     monkeypatch.setattr(
         admin_transfer_service,
@@ -189,6 +359,7 @@ def test_existing_admin_transfer_notifies_only_after_commit(monkeypatch):
         current_admin_id=current.user_id,
         target_user_id=target.user_id,
         password="valid-password",
+        totp_code="123456",
     )
 
     assert ok
@@ -207,6 +378,8 @@ def test_existing_admin_transfer_notifies_only_after_commit(monkeypatch):
             ),
         ),
     ]
+    assert "valid-password" not in str(audit_calls)
+    assert "123456" not in str(audit_calls)
 
 
 def test_notify_admin_transfer_completion_runs_after_commit_actions(monkeypatch):
