@@ -101,16 +101,24 @@ function renderAdminTransferManagerOptions() {
 }
 
 function renderAdminTransferFormFields() {
+    const confirmationFields = `
+        <div class="space-y-1">
+            <label for="admin-transfer-password" class="text-xs font-black uppercase tracking-wide text-blue-900">Password atual</label>
+            <input id="admin-transfer-password" type="password" autocomplete="current-password" class="min-h-10 w-full rounded-lg border-2 border-blue-900 bg-white px-3 py-2 text-sm font-semibold text-gray-900 outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-blue-900/20" placeholder="Confirma a tua password">
+        </div>
+        <div class="space-y-1">
+            <label for="admin-transfer-totp" class="text-xs font-black uppercase tracking-wide text-blue-900">Código do autenticador</label>
+            <input id="admin-transfer-totp" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" class="min-h-10 w-full rounded-lg border-2 border-blue-900 bg-white px-3 py-2 text-center text-lg font-semibold tracking-widest text-gray-900 outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-blue-900/20" placeholder="000000">
+        </div>
+    `;
+
     if (adminTransferMode === "new") {
         return `
             <div class="space-y-1">
                 <label for="admin-transfer-new-email" class="text-xs font-black uppercase tracking-wide text-blue-900">Email do novo administrador</label>
                 <input id="admin-transfer-new-email" type="email" autocomplete="email" class="min-h-10 w-full rounded-lg border-2 border-blue-900 bg-white px-3 py-2 text-sm font-semibold text-gray-900 outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-blue-900/20" placeholder="novo.admin@ubi.pt">
             </div>
-            <div class="space-y-1">
-                <label for="admin-transfer-password" class="text-xs font-black uppercase tracking-wide text-blue-900">Senha atual</label>
-                <input id="admin-transfer-password" type="password" autocomplete="current-password" class="min-h-10 w-full rounded-lg border-2 border-blue-900 bg-white px-3 py-2 text-sm font-semibold text-gray-900 outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-blue-900/20" placeholder="Confirma a tua senha">
-            </div>
+            ${confirmationFields}
         `;
     }
 
@@ -121,10 +129,7 @@ function renderAdminTransferFormFields() {
                 ${renderAdminTransferManagerOptions()}
             </select>
         </div>
-        <div class="space-y-1">
-            <label for="admin-transfer-password" class="text-xs font-black uppercase tracking-wide text-blue-900">Senha atual</label>
-            <input id="admin-transfer-password" type="password" autocomplete="current-password" class="min-h-10 w-full rounded-lg border-2 border-blue-900 bg-white px-3 py-2 text-sm font-semibold text-gray-900 outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-blue-900/20" placeholder="Confirma a tua senha">
-        </div>
+        ${confirmationFields}
     `;
 }
 
@@ -148,7 +153,7 @@ function renderAdminTransferSelection() {
         <form data-admin-transfer-form class="space-y-4">
             ${renderAdminTransferFormFields()}
             <div class="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800">
-                Esta ação altera quem tem a função de administrador. Confirma os dados antes de continuar.
+                Esta ação altera quem tem a função de administrador. Confirma com a tua password e o código do autenticador.
             </div>
             <div class="flex flex-wrap justify-end gap-3">
                 <button type="button" data-close-modal="modalTransferenciaAdmin" class="rounded-lg border-2 border-blue-900 px-4 py-2 text-sm font-bold text-blue-900 hover:bg-gray-100">Cancelar</button>
@@ -221,19 +226,29 @@ function validarEmailTransferenciaAdmin(email) {
 
 function validarFormularioTransferenciaAdmin() {
     const password = document.getElementById("admin-transfer-password")?.value || "";
+    const totpCode = document.getElementById("admin-transfer-totp")?.value.replace(/\D/g, "").slice(0, 6) || "";
 
     if (adminTransferMode === "existing") {
         const targetUserId = document.getElementById("admin-transfer-target-user")?.value || "";
         if (!targetUserId) return "Seleciona um gestor elegível.";
-        if (!password) return "Senha atual obrigatória.";
+        if (!password) return "Password atual obrigatória.";
+        if (!/^\d{6}$/.test(totpCode)) return "Introduz um código TOTP de 6 dígitos.";
         return "";
     }
 
     const email = document.getElementById("admin-transfer-new-email")?.value.trim() || "";
     if (!email) return "Email obrigatório.";
     if (!validarEmailTransferenciaAdmin(email)) return "Email inválido.";
-    if (!password) return "Senha atual obrigatória.";
+    if (!password) return "Password atual obrigatória.";
+    if (!/^\d{6}$/.test(totpCode)) return "Introduz um código TOTP de 6 dígitos.";
     return "";
+}
+
+function limparCredenciaisTransferenciaAdmin() {
+    const passwordInput = document.getElementById("admin-transfer-password");
+    const totpInput = document.getElementById("admin-transfer-totp");
+    if (passwordInput) passwordInput.value = "";
+    if (totpInput) totpInput.value = "";
 }
 
 async function executarTransferenciaAdmin() {
@@ -246,6 +261,7 @@ async function executarTransferenciaAdmin() {
     }
 
     const password = document.getElementById("admin-transfer-password")?.value || "";
+    const totpCode = document.getElementById("admin-transfer-totp")?.value.replace(/\D/g, "").slice(0, 6) || "";
     setAdminTransferBusy(true);
     renderAdminTransferMessage("");
 
@@ -254,7 +270,8 @@ async function executarTransferenciaAdmin() {
             const targetUserId = document.getElementById("admin-transfer-target-user")?.value || "";
             await postJSON("/admin-transfer/existing", {
                 target_user_id: Number(targetUserId),
-                password
+                password,
+                totp_code: totpCode
             });
             mostrarToast("Administração transferida com sucesso.");
             renderAdminTransferMessage("Administração transferida. A sessão atual será encerrada.", false);
@@ -267,7 +284,8 @@ async function executarTransferenciaAdmin() {
         const email = document.getElementById("admin-transfer-new-email")?.value.trim() || "";
         await postJSON("/admin-transfer/new", {
             email,
-            password
+            password,
+            totp_code: totpCode
         });
         mostrarToast("Transferência iniciada com sucesso.");
         await carregarDados();
@@ -275,6 +293,7 @@ async function executarTransferenciaAdmin() {
     } catch (error) {
         renderAdminTransferMessage(error.message, true);
     } finally {
+        limparCredenciaisTransferenciaAdmin();
         if (adminTransferMode !== "existing" || !document.getElementById("adminTransferMessage")?.textContent.includes("transferida")) {
             setAdminTransferBusy(false);
         }
