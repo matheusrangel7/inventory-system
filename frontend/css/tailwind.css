@@ -2213,3 +2213,9 @@ video {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
+
+.profile-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  width: 14rem;
+}
