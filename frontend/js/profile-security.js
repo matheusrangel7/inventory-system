@@ -310,6 +310,7 @@
             window.location.replace("/login?password=changed");
         });
 
+        window.MfaReconfiguration?.init();
         initialized = true;
     }
 

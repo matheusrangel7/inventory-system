@@ -8,6 +8,7 @@
     const globalError = document.getElementById("globalError");
     const registerSuccess = document.getElementById("registerSuccess");
     const passwordChangedSuccess = document.getElementById("passwordChangedSuccess");
+    const mfaReconfiguredSuccess = document.getElementById("mfaReconfiguredSuccess");
     const submitBtn = document.getElementById("submitBtn");
     const btnSpinner = document.getElementById("btnSpinner");
     const btnText = document.getElementById("btnText");
@@ -187,6 +188,10 @@
 
     if (params.get("password") === "changed") {
         passwordChangedSuccess?.classList.remove("hidden");
+    }
+
+    if (params.get("mfa") === "reconfigured") {
+        mfaReconfiguredSuccess?.classList.remove("hidden");
     }
 
     if (params.get("session") === "expired") {

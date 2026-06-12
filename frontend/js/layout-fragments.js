@@ -40,6 +40,11 @@
                     data-password-change-open role="menuitem">
                     Alterar palavra-passe
                 </button>
+                <button type="button"
+                    class="w-full rounded-lg px-3 py-2 text-left text-sm font-bold text-blue-900 hover:bg-blue-50"
+                    data-mfa-reconfiguration-open role="menuitem">
+                    Reconfigurar autenticador
+                </button>
             </div>
         </div>
     </div>
