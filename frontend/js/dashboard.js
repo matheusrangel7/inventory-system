@@ -42,6 +42,8 @@
             logout();
         });
 
+        window.ProfileSecurity?.init();
+
         return user;
     }
 

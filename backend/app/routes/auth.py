@@ -6,12 +6,14 @@ import time
 import qrcode
 
 from flask import Blueprint, current_app, g, make_response, request
+from flask_jwt_extended import get_jwt
 
 from app.services import (
     auth_service,
     mfa_enrollment_service,
     mfa_recovery_service,
     mfa_service,
+    password_change_service,
     password_reset_service,
     session_service,
 )
@@ -22,6 +24,9 @@ from app.utils.cookie_helpers import (
     get_mfa_step_claims,
     clear_mfa_step_cookie,
     build_refresh_csrf_token,
+    set_password_change_step_cookie,
+    get_password_change_step_claims,
+    clear_password_change_step_cookie,
 )
 from app.utils.responses import success, error
 from app.extensions import limiter
@@ -29,6 +34,7 @@ from app.constants import (
     CSRF_HEADER_NAME,
     LOGIN_RATE_LIMIT,
     MFA_RECOVERY_RATE_LIMIT,
+    PASSWORD_CHANGE_RATE_LIMIT,
     PASSWORD_RESET_COMPLETE_RATE_LIMIT,
     PASSWORD_RESET_REQUEST_RATE_LIMIT,
     PASSWORD_RESET_RESPONSE_JITTER_MILLISECONDS,
@@ -128,6 +134,80 @@ def complete_password_reset():
     if not ok:
         return error(message, status=400)
     return success(message=message)
+
+
+@auth_bp.route("/password-change/confirm", methods=["POST"])
+@limiter.limit(PASSWORD_CHANGE_RATE_LIMIT)
+@authenticated_user_required
+def confirm_password_change():
+    data = request.get_json(silent=True) or {}
+    current_password = data.get("current_password", "")
+    if not isinstance(current_password, str):
+        current_password = ""
+    totp_code = str(data.get("totp_code", "")).strip()
+
+    ok, message, fingerprint = password_change_service.confirm_identity(
+        g.current_user.user_id,
+        current_password,
+        totp_code,
+    )
+    if not ok or not fingerprint:
+        return error(message, status=400)
+
+    response = make_response(success(message=message))
+    return set_password_change_step_cookie(
+        response,
+        g.current_user.user_id,
+        fingerprint,
+        get_jwt()["jti"],
+    )
+
+
+@auth_bp.route("/password-change/complete", methods=["POST"])
+@limiter.limit(PASSWORD_CHANGE_RATE_LIMIT)
+@authenticated_user_required
+def complete_password_change():
+    claims = get_password_change_step_claims()
+    step_user_id = _get_user_id_from_claims(claims or {})
+    fingerprint = (claims or {}).get("password_fingerprint")
+    step_access_jti = (claims or {}).get("access_jti")
+    current_access_jti = get_jwt().get("jti")
+
+    if (
+        step_user_id != g.current_user.user_id
+        or not isinstance(fingerprint, str)
+        or not fingerprint
+        or not isinstance(step_access_jti, str)
+        or not isinstance(current_access_jti, str)
+        or not hmac.compare_digest(step_access_jti, current_access_jti)
+    ):
+        response = make_response(
+            error(password_change_service.INVALID_STEP_MESSAGE, status=400)
+        )
+        return clear_password_change_step_cookie(response)
+
+    data = request.get_json(silent=True) or {}
+    new_password = data.get("new_password", "")
+    if not isinstance(new_password, str):
+        new_password = ""
+
+    ok, message, confirmation_valid = (
+        password_change_service.complete_password_change(
+            g.current_user.user_id,
+            new_password,
+            fingerprint,
+        )
+    )
+    if not ok:
+        response = make_response(error(message, status=400))
+        if not confirmation_valid:
+            clear_password_change_step_cookie(response)
+        return response
+
+    response = make_response(success(message=message))
+    clear_auth_cookies(response)
+    clear_mfa_step_cookie(response)
+    return clear_password_change_step_cookie(response)
 
 
 @auth_bp.route("/login", methods=["POST"])

@@ -218,3 +218,33 @@ def send_password_reset_confirmation_email(to_email: str) -> bool:
             f"Erro ao enviar confirmação de recuperação para {to_email}: {exc}"
         )
         return False
+
+
+def send_password_change_confirmation_email(to_email: str) -> bool:
+    msg = Message(
+        subject="[InvUBI] Palavra-passe alterada",
+        recipients=[to_email],
+        body=(
+            "A palavra-passe da sua conta InvUBI foi alterada.\n\n"
+            "Todas as sessões ativas foram encerradas. Inicie sessão novamente "
+            "com a nova palavra-passe.\n\n"
+            "Se não realizou esta alteração, contacte imediatamente o suporte."
+        ),
+        html=(
+            "<p>A palavra-passe da sua conta <strong>InvUBI</strong> foi "
+            "alterada.</p>"
+            "<p>Todas as sessões ativas foram encerradas. Inicie sessão "
+            "novamente com a nova palavra-passe.</p>"
+            "<p style='color:#991b1b;'>Se não realizou esta alteração, "
+            "contacte imediatamente o suporte.</p>"
+        ),
+    )
+
+    try:
+        mail.send(msg)
+        return True
+    except Exception as exc:
+        current_app.logger.error(
+            f"Erro ao enviar confirmação de alteração para {to_email}: {exc}"
+        )
+        return False
