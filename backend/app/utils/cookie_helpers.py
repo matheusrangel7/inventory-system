@@ -21,6 +21,8 @@ from app.constants import (
     REFRESH_CSRF_COOKIE_NAME,
     MFA_STEP_COOKIE_NAME,
     MFA_STEP_COOKIE_PATH,
+    PASSWORD_CHANGE_STEP_COOKIE_NAME,
+    PASSWORD_CHANGE_STEP_COOKIE_PATH,
     STEP_TOKEN_MINUTES,
 )
 
@@ -93,6 +95,10 @@ def clear_auth_cookies(response):
     unset_jwt_cookies(response)
     response.delete_cookie(REFRESH_TOKEN_COOKIE_NAME, path=REFRESH_TOKEN_PATH)
     response.delete_cookie(REFRESH_CSRF_COOKIE_NAME, path="/")
+    response.delete_cookie(
+        PASSWORD_CHANGE_STEP_COOKIE_NAME,
+        path=PASSWORD_CHANGE_STEP_COOKIE_PATH,
+    )
     return response
 
 
@@ -153,3 +159,56 @@ def get_mfa_step_claims():
     except PyJWTError:
         return None
     return claims if claims.get("token_use") == "mfa_step" else None
+
+
+def set_password_change_step_cookie(
+    response,
+    user_id: int,
+    password_fingerprint: str,
+    access_jti: str,
+):
+    token = create_access_token(
+        identity=str(user_id),
+        additional_claims={
+            "token_use": "password_change_step",
+            "password_change_confirmed": True,
+            "password_fingerprint": password_fingerprint,
+            "access_jti": access_jti,
+        },
+        expires_delta=timedelta(minutes=STEP_TOKEN_MINUTES),
+    )
+    secure = current_app.config.get("JWT_COOKIE_SECURE", True)
+    response.set_cookie(
+        PASSWORD_CHANGE_STEP_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=secure,
+        samesite="Strict",
+        max_age=STEP_TOKEN_MINUTES * 60,
+        path=PASSWORD_CHANGE_STEP_COOKIE_PATH,
+    )
+    return response
+
+
+def clear_password_change_step_cookie(response):
+    response.delete_cookie(
+        PASSWORD_CHANGE_STEP_COOKIE_NAME,
+        path=PASSWORD_CHANGE_STEP_COOKIE_PATH,
+    )
+    return response
+
+
+def get_password_change_step_claims():
+    token = request.cookies.get(PASSWORD_CHANGE_STEP_COOKIE_NAME)
+    if not token:
+        return None
+    try:
+        claims = decode_token(token)
+    except PyJWTError:
+        return None
+    return (
+        claims
+        if claims.get("token_use") == "password_change_step"
+        and claims.get("password_change_confirmed") is True
+        else None
+    )
