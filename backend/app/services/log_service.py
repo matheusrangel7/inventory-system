@@ -63,7 +63,7 @@ FIELD_LABELS = {
     "specs": "Características",
     "specs_details": "Detalhe das características",
     "status": "Estado",
-    "totp_secret": "MFA configurado",
+    "totp_secret_encrypted": "MFA configurado",
     "user_id": "ID do utilizador",
 }
 

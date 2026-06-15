@@ -12,6 +12,7 @@ from app.services.scheduler_service import check_maintenance
 from app.config import config_map
 from app.extensions import db, jwt, limiter, mail
 from app.models.base import Base
+from app.security.totp_secrets import configure_totp_encryption
 from app.utils.responses import error
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ def create_app(config_name: str = None) -> Flask:
         raise RuntimeError(f"Ambiente Flask desconhecido: {config_name}.")
 
     app.config.from_object(config_class)
+    configure_totp_encryption(app)
     _validate_security_config(app, config_name)
     app.wsgi_app = ProxyFix(
         app.wsgi_app,

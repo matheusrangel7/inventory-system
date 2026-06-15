@@ -10,8 +10,17 @@ By:
 
 ## Ambiente de desenvolvimento
 
-1. Copie `.env.example` para `.env` e defina passwords diferentes para
-   `POSTGRES_PASSWORD` e `APP_DB_PASSWORD`.
+1. Copie `.env.example` para `.env`, defina passwords diferentes para
+   `POSTGRES_PASSWORD` e `APP_DB_PASSWORD` e gere uma chave de criptografia
+   TOTP:
+
+```bash
+python -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
+```
+
+Use o valor em `TOTP_ENCRYPTION_KEYS_JSON` e mantenha o respetivo ID em
+`TOTP_ENCRYPTION_ACTIVE_KEY_ID`. Mantenha o JSON entre aspas simples, como no
+`.env.example`. O backend não arranca sem um keyring válido.
 2. Reconstrua a base de dados quando alterar os scripts de `db/init`:
 
 ```bash

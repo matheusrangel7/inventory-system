@@ -20,8 +20,8 @@ class MfaReconfiguration(Base):
         nullable=False,
         unique=True,
     )
-    pending_totp_secret: Mapped[str] = mapped_column(
-        String(64),
+    pending_totp_secret_encrypted: Mapped[str] = mapped_column(
+        String(255),
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(
