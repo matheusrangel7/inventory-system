@@ -72,6 +72,13 @@ function renderUserTableActions(user) {
             title: "Reenviar email de registo",
             attrs: { "data-user-action": "resend-registration", "data-user-id": userId }
         });
+    } else {
+        actions.push({
+            label: "Recuperar acesso",
+            variant: "secondary",
+            title: "Recuperar acesso do utilizador",
+            attrs: { "data-user-action": "recover-access", "data-user-id": userId }
+        });
     }
 
     actions.push({ label: "Remover", variant: "danger", title: "Remover utilizador", attrs: { "data-user-action": "remove", "data-user-id": userId } });
@@ -145,9 +152,25 @@ function getSelectedUserLocationValues(exceptSelect = null) {
         .filter(Boolean));
 }
 
+function getEditingUserId() {
+    return String(
+        document.getElementById("editing-user-id")?.value || ""
+    );
+}
+
+function isLocationAvailableForUser(location, editingUserId = "") {
+    const managerId = String(getLocationManagerId(location) || "");
+    return !managerId || (editingUserId && managerId === editingUserId);
+}
+
 function renderUserLocationOptions(selectedValue = "", selectedValues = new Set()) {
     const selected = String(selectedValue || "");
+    const editingUserId = getEditingUserId();
     const options = cacheLocais
+        .filter(location => (
+            isLocationAvailableForUser(location, editingUserId)
+            || String(getLocationId(location)) === selected
+        ))
         .map(location => {
             const value = String(getLocationId(location));
             const label = getLocationName(location);
@@ -394,6 +417,17 @@ function ligarAcoesUtilizadores() {
 
         if (button.dataset.userAction === "resend-registration") {
             reenviarEmailRegistoUtilizador(userId);
+        }
+
+        if (button.dataset.userAction === "recover-access") {
+            const user = cacheUtilizadores.find(
+                item => String(getUserId(item)) === String(userId)
+            );
+            if (!user || isPendingUser(user)) {
+                mostrarToast("Utilizador inválido para recuperação.", true);
+                return;
+            }
+            window.AdminAccountRecovery?.open(user);
         }
     });
 

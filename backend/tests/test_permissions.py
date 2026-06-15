@@ -142,6 +142,18 @@ def test_route_handlers_declare_expected_permissions():
 
     assert users.create_user.required_permission == Permission.USERS_INVITE
     assert users.delete_user.required_permission == Permission.USERS_DEACTIVATE
+    assert (
+        users.recover_access_email.required_permission
+        == Permission.USERS_RECOVER_ACCESS
+    )
+    assert (
+        users.recover_access_password.required_permission
+        == Permission.USERS_RECOVER_ACCESS
+    )
+    assert (
+        users.recover_access_mfa.required_permission
+        == Permission.USERS_RECOVER_ACCESS
+    )
     assert logs.list_logs.required_permission == Permission.LOGS_READ
     assert (
         logs.trigger_maintenance_check.required_permission

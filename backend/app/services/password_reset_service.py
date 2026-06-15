@@ -28,6 +28,34 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def issue_password_reset_token(user: User) -> str:
+    now = datetime.now(timezone.utc)
+    raw_token = secrets.token_urlsafe(48)
+    token_hash = _hash_token(raw_token)
+
+    reset_token = db.session.execute(
+        select(PasswordResetToken)
+        .where(PasswordResetToken.user_id == user.user_id)
+        .with_for_update()
+    ).scalar_one_or_none()
+
+    if reset_token is None:
+        reset_token = PasswordResetToken(
+            user_id=user.user_id,
+            token_hash=token_hash,
+        )
+        db.session.add(reset_token)
+    else:
+        reset_token.token_hash = token_hash
+
+    reset_token.created_at = now
+    reset_token.expires_at = now + timedelta(
+        minutes=PASSWORD_RESET_TOKEN_MINUTES
+    )
+    reset_token.used_at = None
+    return raw_token
+
+
 def request_password_reset(email: str) -> str:
     try:
         user = db.session.execute(
@@ -43,30 +71,7 @@ def request_password_reset(email: str) -> str:
         ):
             return GENERIC_REQUEST_MESSAGE
 
-        now = datetime.now(timezone.utc)
-        raw_token = secrets.token_urlsafe(48)
-        token_hash = _hash_token(raw_token)
-
-        reset_token = db.session.execute(
-            select(PasswordResetToken)
-            .where(PasswordResetToken.user_id == user.user_id)
-            .with_for_update()
-        ).scalar_one_or_none()
-
-        if reset_token is None:
-            reset_token = PasswordResetToken(
-                user_id=user.user_id,
-                token_hash=token_hash,
-            )
-            db.session.add(reset_token)
-        else:
-            reset_token.token_hash = token_hash
-
-        reset_token.created_at = now
-        reset_token.expires_at = now + timedelta(
-            minutes=PASSWORD_RESET_TOKEN_MINUTES
-        )
-        reset_token.used_at = None
+        raw_token = issue_password_reset_token(user)
         db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()

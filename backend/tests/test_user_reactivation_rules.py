@@ -15,14 +15,22 @@ class FakeResult:
     def scalar_one_or_none(self):
         return self.value
 
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self.value
+
 
 class FakeSession:
     def __init__(self, results):
         self.results = iter(results)
         self.added = None
         self.committed = False
+        self.statements = []
 
     def execute(self, statement):
+        self.statements.append(statement)
         return FakeResult(next(self.results))
 
     def add(self, value):
@@ -122,6 +130,60 @@ def test_completed_registration_email_change_is_blocked():
     assert not user_service._is_completed_registration_email_change(
         user, "gestor@ubi.pt"
     )
+
+
+def test_location_selection_accepts_only_unassigned_rooms(monkeypatch):
+    available = SimpleNamespace(
+        location_id=1,
+        is_active=True,
+        location_manager_id=None,
+    )
+    session = FakeSession([[available]])
+    monkeypatch.setattr(user_service, "db", SimpleNamespace(session=session))
+
+    ok, message, locations = user_service._get_active_locations([1])
+
+    assert ok
+    assert message == "Salas válidas."
+    assert locations == [available]
+    assert session.statements[0]._for_update_arg is not None
+
+
+def test_location_selection_rejects_room_owned_by_another_manager(monkeypatch):
+    occupied = SimpleNamespace(
+        location_id=1,
+        is_active=True,
+        location_manager_id=99,
+    )
+    session = FakeSession([[occupied]])
+    monkeypatch.setattr(user_service, "db", SimpleNamespace(session=session))
+
+    ok, message, locations = user_service._get_active_locations(
+        [1],
+        allowed_manager_id=10,
+    )
+
+    assert not ok
+    assert message == "Uma ou mais salas já têm um gestor associado."
+    assert locations == []
+
+
+def test_location_selection_allows_rooms_owned_by_edited_manager(monkeypatch):
+    assigned = SimpleNamespace(
+        location_id=1,
+        is_active=True,
+        location_manager_id=10,
+    )
+    session = FakeSession([[assigned]])
+    monkeypatch.setattr(user_service, "db", SimpleNamespace(session=session))
+
+    ok, _, locations = user_service._get_active_locations(
+        [1],
+        allowed_manager_id=10,
+    )
+
+    assert ok
+    assert locations == [assigned]
 
 
 @pytest.mark.parametrize(
@@ -256,7 +318,11 @@ def test_create_pending_gestor_always_sets_gestor_role(monkeypatch):
     monkeypatch.setattr(
         user_service,
         "_get_active_locations",
-        lambda location_ids: (True, "Salas válidas.", []),
+        lambda location_ids, allowed_manager_id=None: (
+            True,
+            "Salas válidas.",
+            [],
+        ),
     )
     monkeypatch.setattr(
         user_service,
@@ -289,7 +355,11 @@ def test_update_user_preserves_gestor_role(monkeypatch):
     monkeypatch.setattr(
         user_service,
         "_get_active_locations",
-        lambda location_ids: (True, "Salas válidas.", []),
+        lambda location_ids, allowed_manager_id=None: (
+            True,
+            "Salas válidas.",
+            [],
+        ),
     )
     monkeypatch.setattr(
         user_service,
@@ -323,7 +393,11 @@ def test_pending_gestor_email_change_reissues_registration_token(monkeypatch):
     monkeypatch.setattr(
         user_service,
         "_get_active_locations",
-        lambda location_ids: (True, "Salas válidas.", []),
+        lambda location_ids, allowed_manager_id=None: (
+            True,
+            "Salas válidas.",
+            [],
+        ),
     )
     monkeypatch.setattr(
         user_service,

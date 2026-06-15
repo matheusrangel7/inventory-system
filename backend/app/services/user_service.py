@@ -104,7 +104,10 @@ def get_pending_gestores() -> list[dict]:
     ]
 
 
-def _get_active_locations(location_ids: list[int]) -> tuple[bool, str, list[Location]]:
+def _get_active_locations(
+    location_ids: list[int],
+    allowed_manager_id: int | None = None,
+) -> tuple[bool, str, list[Location]]:
     if not isinstance(location_ids, list):
         return False, "location_ids deve ser uma lista.", []
 
@@ -123,7 +126,7 @@ def _get_active_locations(location_ids: list[int]) -> tuple[bool, str, list[Loca
             select(Location).where(
                 Location.location_id.in_(normalized_ids),
                 Location.is_active == True,
-            )
+            ).with_for_update()
         )
         .scalars()
         .all()
@@ -131,6 +134,15 @@ def _get_active_locations(location_ids: list[int]) -> tuple[bool, str, list[Loca
 
     if len(locations) != len(normalized_ids):
         return False, "Uma ou mais salas não foram encontradas ou estão inativas.", []
+
+    unavailable = [
+        location
+        for location in locations
+        if location.location_manager_id is not None
+        and location.location_manager_id != allowed_manager_id
+    ]
+    if unavailable:
+        return False, "Uma ou mais salas já têm um gestor associado.", []
 
     return True, "Salas válidas.", locations
 
@@ -258,7 +270,10 @@ def reactivate_inactive_gestor_invite(
     if not _can_reactivate_inactive_gestor(user, allow_completed):
         return False, "Já existe um utilizador com este email.", None, None
 
-    ok, message, locations = _get_active_locations(location_ids)
+    ok, message, locations = _get_active_locations(
+        location_ids,
+        allowed_manager_id=user.user_id,
+    )
     if not ok:
         return False, message, None, None
 
@@ -374,7 +389,10 @@ def update_user(
     if existing:
         return False, "Já existe outro utilizador com este email.", None
 
-    ok, message, locations = _get_active_locations(location_ids)
+    ok, message, locations = _get_active_locations(
+        location_ids,
+        allowed_manager_id=user.user_id,
+    )
     if not ok:
         return False, message, None
 

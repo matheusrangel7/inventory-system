@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.domain.enums import AdminTransferStatus, RegistrationStatus, UserRole
-from app.services import admin_transfer_service
+from app.services import admin_confirmation_service, admin_transfer_service
 
 
 class FakeResult:
@@ -74,15 +74,21 @@ def make_current_admin(**overrides):
     return SimpleNamespace(**values)
 
 
-def test_transfer_confirmation_verifies_password_totp_and_locks_admin(monkeypatch):
+def test_administrator_confirmation_verifies_password_totp_and_locks_admin(
+    monkeypatch,
+):
     current = make_current_admin()
     session = FakeSession([current])
     password_checks = []
     totp_checks = []
 
-    monkeypatch.setattr(admin_transfer_service, "db", SimpleNamespace(session=session))
     monkeypatch.setattr(
-        admin_transfer_service,
+        admin_confirmation_service,
+        "db",
+        SimpleNamespace(session=session),
+    )
+    monkeypatch.setattr(
+        admin_confirmation_service,
         "ph",
         SimpleNamespace(
             verify=lambda stored_hash, password: (
@@ -91,14 +97,14 @@ def test_transfer_confirmation_verifies_password_totp_and_locks_admin(monkeypatc
         ),
     )
     monkeypatch.setattr(
-        admin_transfer_service.mfa_service,
+        admin_confirmation_service.mfa_service,
         "verify_user_totp",
         lambda user, code: (
             totp_checks.append((user.totp_secret_encrypted, code)) or True
         ),
     )
 
-    ok, message, user = admin_transfer_service._confirm_transfer_credentials(
+    ok, message, user = admin_confirmation_service.confirm_administrator(
         current.user_id,
         "valid-password",
         "123456",
@@ -123,18 +129,25 @@ def test_transfer_confirmation_verifies_password_totp_and_locks_admin(monkeypatc
         {"totp_secret_encrypted": None},
     ],
 )
-def test_transfer_confirmation_rejects_invalid_admin_state(monkeypatch, overrides):
+def test_administrator_confirmation_rejects_invalid_admin_state(
+    monkeypatch,
+    overrides,
+):
     session = FakeSession([make_current_admin(**overrides)])
-    monkeypatch.setattr(admin_transfer_service, "db", SimpleNamespace(session=session))
+    monkeypatch.setattr(
+        admin_confirmation_service,
+        "db",
+        SimpleNamespace(session=session),
+    )
 
-    ok, message, user = admin_transfer_service._confirm_transfer_credentials(
+    ok, message, user = admin_confirmation_service.confirm_administrator(
         1,
         "valid-password",
         "123456",
     )
 
     assert not ok
-    assert message == admin_transfer_service.INVALID_CONFIRMATION_MESSAGE
+    assert message == admin_confirmation_service.INVALID_CONFIRMATION_MESSAGE
     assert user is None
     assert session.rolled_back
 
@@ -143,32 +156,36 @@ def test_transfer_confirmation_rejects_invalid_admin_state(monkeypatch, override
     ("password_valid", "totp_valid"),
     [(False, True), (True, False), (False, False)],
 )
-def test_transfer_confirmation_uses_generic_error_for_invalid_factor(
+def test_administrator_confirmation_uses_generic_error_for_invalid_factor(
     monkeypatch,
     password_valid,
     totp_valid,
 ):
     session = FakeSession([make_current_admin()])
-    monkeypatch.setattr(admin_transfer_service, "db", SimpleNamespace(session=session))
     monkeypatch.setattr(
-        admin_transfer_service,
+        admin_confirmation_service,
+        "db",
+        SimpleNamespace(session=session),
+    )
+    monkeypatch.setattr(
+        admin_confirmation_service,
         "ph",
         SimpleNamespace(verify=lambda stored_hash, password: password_valid),
     )
     monkeypatch.setattr(
-        admin_transfer_service.mfa_service,
+        admin_confirmation_service.mfa_service,
         "verify_user_totp",
         lambda user, code: totp_valid,
     )
 
-    ok, message, user = admin_transfer_service._confirm_transfer_credentials(
+    ok, message, user = admin_confirmation_service.confirm_administrator(
         1,
         "submitted-password",
         "123456",
     )
 
     assert not ok
-    assert message == admin_transfer_service.INVALID_CONFIRMATION_MESSAGE
+    assert message == admin_confirmation_service.INVALID_CONFIRMATION_MESSAGE
     assert user is None
     assert session.rolled_back
 
