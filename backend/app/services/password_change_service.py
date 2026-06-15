@@ -1,10 +1,7 @@
-import binascii
 import hashlib
 import hmac
 import logging
-import re
 
-import pyotp
 from argon2.exceptions import (
     HashingError,
     InvalidHashError,
@@ -14,11 +11,10 @@ from argon2.exceptions import (
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.constants import MFA_VALID_WINDOW
 from app.domain.enums import RegistrationStatus
 from app.extensions import db, ph
 from app.models.user import User
-from app.services import email_service, session_service
+from app.services import email_service, mfa_service, session_service
 from app.services.password_service import validate_password
 from app.utils.audit import log_action
 
@@ -52,7 +48,7 @@ def confirm_identity(
             or not user.is_active
             or user.registration_status != RegistrationStatus.COMPLETED
             or not user.mfa_enabled
-            or not user.totp_secret
+            or not user.totp_secret_encrypted
         ):
             db.session.rollback()
             return False, INVALID_CONFIRMATION_MESSAGE, None
@@ -62,16 +58,7 @@ def confirm_identity(
         except (VerifyMismatchError, VerificationError, InvalidHashError):
             password_valid = False
 
-        try:
-            totp_valid = bool(
-                re.fullmatch(r"\d{6}", totp_code or "")
-                and pyotp.TOTP(user.totp_secret).verify(
-                    totp_code,
-                    valid_window=MFA_VALID_WINDOW,
-                )
-            )
-        except (binascii.Error, TypeError, ValueError):
-            totp_valid = False
+        totp_valid = mfa_service.verify_user_totp(user, totp_code)
         if not password_valid or not totp_valid:
             db.session.rollback()
             return False, INVALID_CONFIRMATION_MESSAGE, None

@@ -50,7 +50,7 @@ def make_user(
         registration_status=registration_status,
         mfa_enabled=mfa_enabled,
         password_hash="old-hash",
-        totp_secret="old-secret",
+        totp_secret_encrypted="old-secret",
         mfa_recovery_code_hash="old-recovery-hash",
         email="gestor@ubi.pt",
         created_at=None,
@@ -108,7 +108,7 @@ def test_completed_gestor_reset_clears_old_credentials(monkeypatch):
     user_service._reset_completed_gestor_for_invite(user)
 
     assert user.password_hash == "new-random-hash"
-    assert user.totp_secret is None
+    assert user.totp_secret_encrypted is None
     assert user.mfa_enabled is False
     assert user.mfa_recovery_code_hash is None
 

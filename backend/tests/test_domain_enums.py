@@ -24,11 +24,12 @@ def test_user_model_uses_existing_postgresql_enum_values():
         "Concluído",
     ]
     assert User.__table__.c.mfa_recovery_code_hash.type.length == 255
+    assert User.__table__.c.totp_secret_encrypted.type.length == 255
 
 
 def test_mfa_reconfiguration_model_has_one_pending_setup_per_user():
     table = MfaReconfiguration.__table__
     assert table.c.user_id.unique
-    assert not table.c.pending_totp_secret.nullable
-    assert table.c.pending_totp_secret.type.length == 64
+    assert not table.c.pending_totp_secret_encrypted.nullable
+    assert table.c.pending_totp_secret_encrypted.type.length == 255
     assert not table.c.expires_at.nullable

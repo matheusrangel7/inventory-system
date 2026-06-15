@@ -57,7 +57,7 @@ def make_user(**overrides):
         "is_active": True,
         "registration_status": RegistrationStatus.COMPLETED,
         "mfa_enabled": True,
-        "totp_secret": "totp-secret",
+        "totp_secret_encrypted": "totp-secret",
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -86,10 +86,10 @@ def test_confirm_identity_validates_both_factors_and_releases_lock(monkeypatch):
         SimpleNamespace(verify=lambda password_hash, password: password == "Password1"),
     )
     monkeypatch.setattr(
-        password_change_service.pyotp,
-        "TOTP",
-        lambda secret: SimpleNamespace(
-            verify=lambda code, valid_window: code == "123456"
+        password_change_service.mfa_service,
+        "verify_user_totp",
+        lambda current_user, code: (
+            current_user is user and code == "123456"
         ),
     )
 
@@ -138,11 +138,9 @@ def test_confirm_identity_uses_generic_failure_for_either_factor(
         SimpleNamespace(verify=verify_password),
     )
     monkeypatch.setattr(
-        password_change_service.pyotp,
-        "TOTP",
-        lambda secret: SimpleNamespace(
-            verify=lambda code, valid_window: code == "123456"
-        ),
+        password_change_service.mfa_service,
+        "verify_user_totp",
+        lambda current_user, code: code == "123456",
     )
 
     ok, message, fingerprint = password_change_service.confirm_identity(
@@ -163,7 +161,7 @@ def test_confirm_identity_uses_generic_failure_for_either_factor(
         {"is_active": False},
         {"registration_status": RegistrationStatus.PENDING},
         {"mfa_enabled": False},
-        {"totp_secret": None},
+        {"totp_secret_encrypted": None},
     ],
 )
 def test_confirm_identity_rejects_invalid_account_state(monkeypatch, overrides):
@@ -189,8 +187,8 @@ def test_confirm_identity_rejects_invalid_account_state(monkeypatch, overrides):
     assert session.rolled_back
 
 
-def test_confirm_identity_rejects_corrupted_totp_secret_generically(monkeypatch):
-    user = make_user(totp_secret="invalid-secret")
+def test_confirm_identity_rejects_corrupted_totp_secret_encrypted_generically(monkeypatch):
+    user = make_user(totp_secret_encrypted="invalid-secret")
     session = FakeSession([user])
     install_session(monkeypatch, session)
     monkeypatch.setattr(
@@ -199,13 +197,9 @@ def test_confirm_identity_rejects_corrupted_totp_secret_generically(monkeypatch)
         SimpleNamespace(verify=lambda password_hash, password: True),
     )
     monkeypatch.setattr(
-        password_change_service.pyotp,
-        "TOTP",
-        lambda secret: SimpleNamespace(
-            verify=lambda code, valid_window: (_ for _ in ()).throw(
-                password_change_service.binascii.Error("invalid base32")
-            )
-        ),
+        password_change_service.mfa_service,
+        "verify_user_totp",
+        lambda current_user, code: False,
     )
 
     ok, message, fingerprint = password_change_service.confirm_identity(

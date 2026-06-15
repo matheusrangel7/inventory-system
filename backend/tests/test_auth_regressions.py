@@ -128,7 +128,7 @@ def test_enroll_mfa_complete_creates_authenticated_session(monkeypatch):
         email="novo.admin@ubi.pt",
         role=UserRole.ADMINISTRATOR,
         mfa_enabled=True,
-        totp_secret="totp-secret",
+        totp_secret_encrypted="totp-secret",
         mfa_recovery_code_hash="argon-hash",
     )
     monkeypatch.setattr(

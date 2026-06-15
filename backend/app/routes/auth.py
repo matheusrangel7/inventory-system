@@ -392,7 +392,7 @@ def enroll_mfa_setup():
     if user_id is None:
         return error("Sessão de configuração MFA inválida ou expirada.", status=401)
 
-    ok, message, secret, otp_uri = mfa_service.setup_mfa(user_id)
+    ok, message, otp_uri = mfa_service.setup_mfa(user_id)
 
     if not ok:
         return error(message, status=400)

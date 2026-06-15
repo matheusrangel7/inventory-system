@@ -16,6 +16,10 @@ def env_bool(name: str, default: bool = False) -> bool:
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-insecure")
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "jwt-insecure")
+    TOTP_ENCRYPTION_ACTIVE_KEY_ID = os.environ.get(
+        "TOTP_ENCRYPTION_ACTIVE_KEY_ID"
+    )
+    TOTP_ENCRYPTION_KEYS_JSON = os.environ.get("TOTP_ENCRYPTION_KEYS_JSON")
 
     APP_DB_USER = os.environ.get("APP_DB_USER", "app_user")
     APP_DB_PASSWORD = os.environ.get("APP_DB_PASSWORD", "password")

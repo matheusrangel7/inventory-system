@@ -233,7 +233,7 @@ def _reset_completed_gestor_for_invite(user: User) -> None:
     random_password = secrets.token_urlsafe(32)
     user.password_hash = ph.hash(random_password)
     del random_password
-    user.totp_secret = None
+    user.totp_secret_encrypted = None
     user.mfa_enabled = False
     user.mfa_recovery_code_hash = None
 

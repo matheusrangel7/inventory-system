@@ -3,18 +3,16 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-import pyotp
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.constants import MFA_VALID_WINDOW
 from app.domain.enums import AdminTransferStatus, RegistrationStatus, UserRole
 from app.extensions import db, ph
 from app.models.admin_transfer import PendingAdminTransfer
 from app.models.location import Location
 from app.models.user import User
-from app.services import email_service, session_service, user_service
+from app.services import email_service, mfa_service, session_service, user_service
 from app.services.registration_token_service import (
     clear_registration_token,
     issue_registration_token,
@@ -76,7 +74,7 @@ def _confirm_transfer_credentials(
         or current.registration_status != RegistrationStatus.COMPLETED
         or current.role != UserRole.ADMINISTRATOR
         or not current.mfa_enabled
-        or not current.totp_secret
+        or not current.totp_secret_encrypted
     ):
         db.session.rollback()
         return False, INVALID_CONFIRMATION_MESSAGE, None
@@ -86,10 +84,7 @@ def _confirm_transfer_credentials(
     except (VerifyMismatchError, VerificationError, InvalidHashError):
         password_valid = False
 
-    totp_valid = pyotp.TOTP(current.totp_secret).verify(
-        totp_code,
-        valid_window=MFA_VALID_WINDOW,
-    )
+    totp_valid = mfa_service.verify_user_totp(current, totp_code)
     if not password_valid or not totp_valid:
         db.session.rollback()
         return False, INVALID_CONFIRMATION_MESSAGE, None

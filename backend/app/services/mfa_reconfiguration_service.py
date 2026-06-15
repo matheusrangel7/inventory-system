@@ -1,4 +1,3 @@
-import binascii
 import hashlib
 import hmac
 import logging
@@ -21,7 +20,14 @@ from app.domain.enums import RegistrationStatus
 from app.extensions import db, ph
 from app.models.mfa_reconfiguration import MfaReconfiguration
 from app.models.user import User
-from app.services import mfa_recovery_service, session_service
+from app.security.totp_secrets import (
+    ACTIVE_SECRET_PURPOSE,
+    PENDING_SECRET_PURPOSE,
+    TotpSecretError,
+    decrypt_totp_secret,
+    encrypt_totp_secret,
+)
+from app.services import mfa_recovery_service, mfa_service, session_service
 from app.utils.audit import log_action
 
 logger = logging.getLogger(__name__)
@@ -79,7 +85,7 @@ def start_reconfiguration(
             or not user.is_active
             or user.registration_status != RegistrationStatus.COMPLETED
             or not user.mfa_enabled
-            or not user.totp_secret
+            or not user.totp_secret_encrypted
         ):
             db.session.rollback()
             return False, INVALID_CONFIRMATION_MESSAGE, None
@@ -89,16 +95,7 @@ def start_reconfiguration(
         except (VerifyMismatchError, VerificationError, InvalidHashError):
             password_valid = False
 
-        try:
-            totp_valid = bool(
-                re.fullmatch(r"\d{6}", current_totp_code or "")
-                and pyotp.TOTP(user.totp_secret).verify(
-                    current_totp_code,
-                    valid_window=MFA_VALID_WINDOW,
-                )
-            )
-        except (binascii.Error, TypeError, ValueError):
-            totp_valid = False
+        totp_valid = mfa_service.verify_user_totp(user, current_totp_code)
 
         if not password_valid or not totp_valid:
             db.session.rollback()
@@ -111,7 +108,11 @@ def start_reconfiguration(
             pending = MfaReconfiguration(user_id=user.user_id)
             db.session.add(pending)
 
-        pending.pending_totp_secret = pending_secret
+        pending.pending_totp_secret_encrypted = encrypt_totp_secret(
+            pending_secret,
+            user.user_id,
+            PENDING_SECRET_PURPOSE,
+        )
         pending.created_at = now
         pending.expires_at = now + timedelta(minutes=STEP_TOKEN_MINUTES)
         db.session.flush()
@@ -123,7 +124,7 @@ def start_reconfiguration(
                 issuer_name=MFA_ISSUER,
             ),
             password_fingerprint=_fingerprint(user.password_hash),
-            totp_fingerprint=_fingerprint(user.totp_secret),
+            totp_fingerprint=_fingerprint(user.totp_secret_encrypted),
         )
         db.session.commit()
         return True, "Identidade confirmada.", setup
@@ -164,14 +165,14 @@ def complete_reconfiguration(
             or not user.is_active
             or user.registration_status != RegistrationStatus.COMPLETED
             or not user.mfa_enabled
-            or not user.totp_secret
+            or not user.totp_secret_encrypted
             or pending.expires_at <= now
             or not hmac.compare_digest(
                 _fingerprint(user.password_hash),
                 expected_password_fingerprint,
             )
             or not hmac.compare_digest(
-                _fingerprint(user.totp_secret),
+                _fingerprint(user.totp_secret_encrypted),
                 expected_totp_fingerprint,
             )
         ):
@@ -179,11 +180,16 @@ def complete_reconfiguration(
             return False, INVALID_STEP_MESSAGE, None, False
 
         try:
-            code_valid = pyotp.TOTP(pending.pending_totp_secret).verify(
+            pending_secret = decrypt_totp_secret(
+                pending.pending_totp_secret_encrypted,
+                user.user_id,
+                PENDING_SECRET_PURPOSE,
+            )
+            code_valid = pyotp.TOTP(pending_secret).verify(
                 new_totp_code,
                 valid_window=MFA_VALID_WINDOW,
             )
-        except (binascii.Error, TypeError, ValueError):
+        except (TotpSecretError, TypeError, ValueError):
             db.session.rollback()
             return False, INVALID_STEP_MESSAGE, None, False
 
@@ -191,7 +197,11 @@ def complete_reconfiguration(
             db.session.rollback()
             return False, INVALID_NEW_CODE_MESSAGE, None, True
 
-        user.totp_secret = pending.pending_totp_secret
+        user.totp_secret_encrypted = encrypt_totp_secret(
+            pending_secret,
+            user.user_id,
+            ACTIVE_SECRET_PURPOSE,
+        )
         recovery_code = mfa_recovery_service.apply_recovery_code(user.user_id)
         if recovery_code is None:
             db.session.rollback()
@@ -213,7 +223,7 @@ def complete_reconfiguration(
         )
         db.session.delete(pending)
         db.session.commit()
-    except (HashingError, SQLAlchemyError):
+    except (HashingError, SQLAlchemyError, TotpSecretError):
         db.session.rollback()
         logger.exception(
             "Erro ao concluir reconfiguração MFA do utilizador %s.",

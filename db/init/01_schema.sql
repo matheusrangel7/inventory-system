@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
     registration_status registration_status_enum NOT NULL DEFAULT 'Pendente',
     registration_token_hash CHAR(64),
     registration_token_expires_at TIMESTAMPTZ,
-    totp_secret VARCHAR(64),
+    totp_secret_encrypted VARCHAR(255),
     mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     mfa_recovery_code_hash VARCHAR(255),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
 CREATE TABLE IF NOT EXISTS mfa_reconfigurations (
     reconfiguration_id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL UNIQUE,
-    pending_totp_secret VARCHAR(64) NOT NULL,
+    pending_totp_secret_encrypted VARCHAR(255) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMPTZ NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
