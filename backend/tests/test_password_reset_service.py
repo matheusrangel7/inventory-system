@@ -121,6 +121,36 @@ def test_new_request_reuses_existing_user_record(monkeypatch):
     assert sent == [(user.email, "new-raw-token")]
 
 
+def test_issue_password_reset_token_does_not_commit_or_send_email(monkeypatch):
+    user = make_user()
+    reset_token = make_reset_token()
+    session = FakeSession([reset_token])
+    sent = []
+    monkeypatch.setattr(
+        password_reset_service,
+        "db",
+        SimpleNamespace(session=session),
+    )
+    monkeypatch.setattr(
+        password_reset_service.secrets,
+        "token_urlsafe",
+        lambda length: "transaction-owned-token",
+    )
+    monkeypatch.setattr(
+        password_reset_service.email_service,
+        "send_password_reset_email",
+        lambda *args: sent.append(args),
+    )
+
+    raw_token = password_reset_service.issue_password_reset_token(user)
+
+    assert raw_token == "transaction-owned-token"
+    assert reset_token.token_hash == password_reset_service._hash_token(raw_token)
+    assert reset_token.used_at is None
+    assert not session.committed
+    assert sent == []
+
+
 def test_complete_reset_changes_password_and_revokes_sessions(monkeypatch):
     user = make_user()
     reset_token = make_reset_token(
