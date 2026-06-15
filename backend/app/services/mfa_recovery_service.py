@@ -67,7 +67,7 @@ def recover_authenticator(user_id: int, code: str) -> tuple[bool, str]:
             or not user.is_active
             or user.registration_status != RegistrationStatus.COMPLETED
             or not user.mfa_enabled
-            or not user.totp_secret
+            or not user.totp_secret_encrypted
             or not user.mfa_recovery_code_hash
         ):
             db.session.rollback()
@@ -79,7 +79,7 @@ def recover_authenticator(user_id: int, code: str) -> tuple[bool, str]:
             db.session.rollback()
             return False, INVALID_RECOVERY_CODE_MESSAGE
 
-        user.totp_secret = None
+        user.totp_secret_encrypted = None
         user.mfa_enabled = False
         user.mfa_recovery_code_hash = None
         session_service.apply_revoke_all_sessions(user.user_id)
