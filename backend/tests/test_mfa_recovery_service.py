@@ -52,7 +52,7 @@ def make_user():
         user_id=7,
         is_active=True,
         registration_status=RegistrationStatus.COMPLETED,
-        totp_secret="totp-secret",
+        totp_secret_encrypted="totp-secret",
         mfa_enabled=True,
         mfa_recovery_code_hash="argon-hash",
     )
@@ -137,6 +137,11 @@ def test_mfa_verification_locks_user_until_session_is_created(monkeypatch):
         "TOTP",
         lambda secret: SimpleNamespace(verify=lambda code, valid_window: True),
     )
+    monkeypatch.setattr(
+        mfa_service,
+        "decrypt_totp_secret",
+        lambda envelope, user_id, purpose: "totp-secret",
+    )
 
     ok, message, verified_user = mfa_service.verify_mfa(
         user.user_id,
@@ -211,7 +216,7 @@ def test_recover_authenticator_consumes_code_and_revokes_sessions(monkeypatch):
 
     assert ok
     assert message == "Autenticador desvinculado com sucesso."
-    assert user.totp_secret is None
+    assert user.totp_secret_encrypted is None
     assert user.mfa_enabled is False
     assert user.mfa_recovery_code_hash is None
     assert all(item.revoked and item.revoked_at for item in sessions)
@@ -249,7 +254,7 @@ def test_invalid_recovery_code_does_not_change_user(monkeypatch):
 
     assert not ok
     assert message == mfa_recovery_service.INVALID_RECOVERY_CODE_MESSAGE
-    assert user.totp_secret == "totp-secret"
+    assert user.totp_secret_encrypted == "totp-secret"
     assert user.mfa_enabled is True
     assert user.mfa_recovery_code_hash == "argon-hash"
     assert session.rolled_back
@@ -259,7 +264,7 @@ def test_invalid_recovery_code_does_not_change_user(monkeypatch):
 def test_consumed_recovery_code_cannot_be_reused(monkeypatch):
     user = make_user()
     user.mfa_recovery_code_hash = None
-    user.totp_secret = None
+    user.totp_secret_encrypted = None
     user.mfa_enabled = False
     session = FakeSession(results=[user])
     monkeypatch.setattr(

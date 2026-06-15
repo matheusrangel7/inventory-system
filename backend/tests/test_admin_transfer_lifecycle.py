@@ -64,7 +64,7 @@ def make_current_admin(**overrides):
         "user_id": 1,
         "email": "old.admin@ubi.pt",
         "password_hash": "password-hash",
-        "totp_secret": "totp-secret",
+        "totp_secret_encrypted": "totp-secret",
         "mfa_enabled": True,
         "is_active": True,
         "role": UserRole.ADMINISTRATOR,
@@ -91,12 +91,10 @@ def test_transfer_confirmation_verifies_password_totp_and_locks_admin(monkeypatc
         ),
     )
     monkeypatch.setattr(
-        admin_transfer_service.pyotp,
-        "TOTP",
-        lambda secret: SimpleNamespace(
-            verify=lambda code, valid_window: (
-                totp_checks.append((secret, code, valid_window)) or True
-            )
+        admin_transfer_service.mfa_service,
+        "verify_user_totp",
+        lambda user, code: (
+            totp_checks.append((user.totp_secret_encrypted, code)) or True
         ),
     )
 
@@ -110,9 +108,7 @@ def test_transfer_confirmation_verifies_password_totp_and_locks_admin(monkeypatc
     assert message == "Credenciais confirmadas."
     assert user is current
     assert password_checks == [("password-hash", "valid-password")]
-    assert totp_checks == [
-        ("totp-secret", "123456", admin_transfer_service.MFA_VALID_WINDOW)
-    ]
+    assert totp_checks == [("totp-secret", "123456")]
     assert session.statements[0]._for_update_arg is not None
     assert not session.rolled_back
 
@@ -124,7 +120,7 @@ def test_transfer_confirmation_verifies_password_totp_and_locks_admin(monkeypatc
         {"registration_status": RegistrationStatus.PENDING},
         {"role": UserRole.MANAGER},
         {"mfa_enabled": False},
-        {"totp_secret": None},
+        {"totp_secret_encrypted": None},
     ],
 )
 def test_transfer_confirmation_rejects_invalid_admin_state(monkeypatch, overrides):
@@ -160,11 +156,9 @@ def test_transfer_confirmation_uses_generic_error_for_invalid_factor(
         SimpleNamespace(verify=lambda stored_hash, password: password_valid),
     )
     monkeypatch.setattr(
-        admin_transfer_service.pyotp,
-        "TOTP",
-        lambda secret: SimpleNamespace(
-            verify=lambda code, valid_window: totp_valid
-        ),
+        admin_transfer_service.mfa_service,
+        "verify_user_totp",
+        lambda user, code: totp_valid,
     )
 
     ok, message, user = admin_transfer_service._confirm_transfer_credentials(
