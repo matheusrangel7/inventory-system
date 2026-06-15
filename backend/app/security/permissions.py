@@ -24,6 +24,7 @@ class Permission(StrEnum):
     USERS_UPDATE = "users.update"
     USERS_DEACTIVATE = "users.deactivate"
     USERS_RESEND_REGISTRATION = "users.resend_registration"
+    USERS_RECOVER_ACCESS = "users.recover_access"
 
     LOGS_READ = "logs.read"
     MAINTENANCE_RUN = "maintenance.run"

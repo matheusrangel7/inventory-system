@@ -248,3 +248,103 @@ def send_password_change_confirmation_email(to_email: str) -> bool:
             f"Erro ao enviar confirmação de alteração para {to_email}: {exc}"
         )
         return False
+
+
+def send_recovery_email_changed_old_address(
+    old_email: str,
+    new_email: str,
+) -> bool:
+    safe_new_email = escape(new_email)
+    msg = Message(
+        subject="[InvUBI] Email da conta alterado",
+        recipients=[old_email],
+        body=(
+            "O email de acesso à sua conta InvUBI foi alterado por um "
+            "administrador.\n\n"
+            f"Novo email: {new_email}\n\n"
+            "Todas as sessões ativas foram encerradas. Se não reconhece esta "
+            "alteração, contacte imediatamente o administrador."
+        ),
+        html=(
+            "<p>O email de acesso à sua conta <strong>InvUBI</strong> foi "
+            "alterado por um administrador.</p>"
+            f"<p>Novo email: <strong>{safe_new_email}</strong></p>"
+            "<p>Todas as sessões ativas foram encerradas.</p>"
+            "<p style='color:#991b1b;'>Se não reconhece esta alteração, "
+            "contacte imediatamente o administrador.</p>"
+        ),
+    )
+
+    try:
+        mail.send(msg)
+        return True
+    except Exception as exc:
+        current_app.logger.error(
+            f"Erro ao notificar o email anterior {old_email}: {exc}"
+        )
+        return False
+
+
+def send_recovery_email_changed_new_address(
+    new_email: str,
+    old_email: str,
+) -> bool:
+    safe_old_email = escape(old_email)
+    msg = Message(
+        subject="[InvUBI] Novo email de acesso",
+        recipients=[new_email],
+        body=(
+            "Este endereço passou a ser o email de acesso à sua conta InvUBI "
+            "após uma recuperação administrativa.\n\n"
+            f"Email anterior: {old_email}\n\n"
+            "Todas as sessões ativas foram encerradas. Utilize este endereço "
+            "no próximo login."
+        ),
+        html=(
+            "<p>Este endereço passou a ser o email de acesso à sua conta "
+            "<strong>InvUBI</strong> após uma recuperação administrativa.</p>"
+            f"<p>Email anterior: <strong>{safe_old_email}</strong></p>"
+            "<p>Todas as sessões ativas foram encerradas. Utilize este "
+            "endereço no próximo login.</p>"
+        ),
+    )
+
+    try:
+        mail.send(msg)
+        return True
+    except Exception as exc:
+        current_app.logger.error(
+            f"Erro ao notificar o novo email {new_email}: {exc}"
+        )
+        return False
+
+
+def send_administrative_mfa_reset_email(to_email: str) -> bool:
+    msg = Message(
+        subject="[InvUBI] Autenticador redefinido",
+        recipients=[to_email],
+        body=(
+            "O autenticador da sua conta InvUBI foi redefinido por um "
+            "administrador.\n\n"
+            "Todas as sessões ativas foram encerradas. No próximo login será "
+            "obrigatório configurar um novo autenticador.\n\n"
+            "Se não reconhece esta ação, contacte imediatamente o administrador."
+        ),
+        html=(
+            "<p>O autenticador da sua conta <strong>InvUBI</strong> foi "
+            "redefinido por um administrador.</p>"
+            "<p>Todas as sessões ativas foram encerradas. No próximo login "
+            "será obrigatório configurar um novo autenticador.</p>"
+            "<p style='color:#991b1b;'>Se não reconhece esta ação, contacte "
+            "imediatamente o administrador.</p>"
+        ),
+    )
+
+    try:
+        mail.send(msg)
+        return True
+    except Exception as exc:
+        current_app.logger.error(
+            f"Erro ao notificar redefinição MFA para {to_email}: {exc}"
+        )
+        return False
