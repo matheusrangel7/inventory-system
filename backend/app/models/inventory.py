@@ -26,6 +26,7 @@ class Feature(Base):
         nullable=False,
         default="text",
     )
+    field_schema: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
     category_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("categories.category_id", ondelete="RESTRICT"),

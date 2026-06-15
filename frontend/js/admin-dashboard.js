@@ -9,6 +9,8 @@ let cacheLocais = [];
 let cacheCategorias = [];
 let cacheRegistos = [];
 let cacheFeaturesPorCategoria = {};
+let cacheValoresSpecsPorFeature = {};
+let cacheAtivosRegistadosPorCategoria = {};
 let ativosSearchRequestId = 0;
 let assetSearchDebounceTimer = null;
 let activeView = "dashboard";
@@ -57,13 +59,14 @@ const TABLE_DATA_CELL_CLASS = "border-b border-gray-100 px-4 py-3 align-top";
 const ASSET_ACTIVE_CHIP_CLASS = "inline-flex items-center gap-1 rounded-full border border-blue-100 bg-white px-3 py-1 text-xs font-bold text-blue-900 shadow-sm";
 const CHIP_REMOVE_BUTTON_CLASS = "ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-blue-900 transition hover:bg-blue-100";
 const ASSET_SPEC_FILTER_EMPTY_CLASS = "rounded-xl border border-dashed border-blue-100 bg-blue-50/40 px-3 py-3 text-sm font-semibold text-gray-500";
-const ASSET_SPEC_FILTER_ROW_CLASS = "grid grid-cols-1 items-end gap-2 rounded-xl border border-blue-100 bg-slate-50/80 p-3 md:grid-cols-[minmax(11rem,1fr)_minmax(8rem,0.65fr)_minmax(11rem,1fr)_auto]";
+const ASSET_SPEC_FILTER_ROW_CLASS = "grid grid-cols-1 items-end gap-2 rounded-2xl border border-blue-100 bg-slate-50/80 p-3 md:grid-cols-2 xl:grid-cols-[minmax(11rem,1.1fr)_minmax(10rem,0.8fr)_minmax(9rem,0.7fr)_minmax(11rem,1fr)_auto]";
 const ASSET_SPEC_FILTER_REMOVE_CLASS = "inline-flex h-10 w-10 items-center justify-center rounded-xl border border-red-200 bg-white text-lg font-black leading-none text-red-700 transition hover:border-red-600 hover:bg-red-50";
 const ASSET_COLUMN_OPTION_BASE_CLASS = "flex cursor-pointer items-start gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-800 transition hover:border-blue-200 hover:bg-blue-50/60";
 const ASSET_COLUMN_OPTION_ACTIVE_CLASS = "border-blue-300 bg-blue-50 text-blue-900 ring-1 ring-blue-100";
 const ASSET_COLUMN_OPTION_REQUIRED_CLASS = "cursor-not-allowed opacity-80";
 const ASSET_COLUMN_OPTION_FEATURE_CLASS = "bg-slate-50";
-const CATEGORY_FEATURE_ROW_CLASS = "grid grid-cols-1 items-end gap-3 rounded-xl border border-blue-100 bg-white p-3 md:grid-cols-[minmax(14rem,1fr)_minmax(10rem,0.7fr)] lg:grid-cols-[minmax(14rem,1fr)_minmax(10rem,0.55fr)_minmax(7.5rem,auto)_auto]";
+const ASSET_TEMPLATE_OPTION_LIMIT = 80;
+const CATEGORY_FEATURE_ROW_CLASS = "grid grid-cols-1 items-end gap-3 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm md:grid-cols-[minmax(14rem,1fr)_minmax(10rem,0.65fr)] xl:grid-cols-[minmax(15rem,1fr)_minmax(10rem,0.55fr)_minmax(7.5rem,auto)_auto]";
 const CATEGORY_FEATURE_FIELD_CLASS = "min-w-0 flex flex-col gap-1";
 const CATEGORY_FEATURE_REPEATABLE_CLASS = "inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black uppercase tracking-wide text-blue-900";
 const CATEGORY_FEATURE_REMOVE_CLASS = "inline-flex h-10 w-10 items-center justify-center rounded-xl border border-red-200 bg-white text-lg font-black leading-none text-red-700 transition hover:border-red-600 hover:bg-red-50";
@@ -195,6 +198,7 @@ async function carregarDados() {
         cacheLocais = locations.length ? locations : derivarLocaisDosAtivos(cacheAtivos);
         cacheCategorias = categories.length ? categories : derivarCategoriasDosAtivos(cacheAtivos);
         cacheFeaturesPorCategoria = {};
+        cacheValoresSpecsPorFeature = {};
         cacheCategorias.forEach(category => {
             if (Array.isArray(category.features)) {
                 cacheFeaturesPorCategoria[String(getCategoryId(category))] = category.features;
@@ -577,6 +581,8 @@ function getTodasFeaturesAtivas() {
                 feature_id: featureId,
                 feature_name: getFeatureName(feature),
                 feature_type: getFeatureType(feature),
+                field_schema: getFeatureFieldSchema(feature),
+                has_field_schema: hasFeatureFieldSchema(feature),
                 is_repeatable: Boolean(feature.is_repeatable || feature.repeatable || feature.multipla),
                 category_name: categoryName
             });
@@ -609,6 +615,8 @@ function getFeaturesDisponiveisParaFiltrosAtivos() {
                 feature_id: getFeatureId(feature),
                 feature_name: getFeatureName(feature),
                 feature_type: getFeatureType(feature),
+                field_schema: getFeatureFieldSchema(feature),
+                has_field_schema: hasFeatureFieldSchema(feature),
                 is_repeatable: isFeatureRepeatable(feature),
                 is_multiple: isFeatureRepeatable(feature),
                 category_id: selectedCategoryId,
@@ -752,19 +760,145 @@ function popularOpcoesFeaturesSpecsAtivos() {
         } else {
             select.value = "";
         }
+
+        atualizarLinhaFiltroSpec(select.closest("[data-asset-spec-filter-row]") || select.parentElement?.parentElement);
     });
 }
 
-function atualizarVisibilidadeValorFiltroSpec(row) {
-    const operatorSelect = row.querySelector("[data-asset-spec-filter-operator]");
-    const valueInput = row.querySelector("[data-asset-spec-filter-value]");
-    if (!operatorSelect || !valueInput) return;
+function getFeatureFiltroSpecPorId(featureId) {
+    const id = String(featureId || "");
+    if (!id) return null;
+    return getFeaturesDisponiveisParaFiltrosAtivos().find(feature => String(getFeatureId(feature)) === id) || null;
+}
 
-    const doesNotNeedValue = operatorSelect.value === "exists";
+function getSelectedFiltroSpecFeature(row) {
+    const featureId = row?.querySelector("[data-asset-spec-filter-feature]")?.value || "";
+    return getFeatureFiltroSpecPorId(featureId);
+}
+
+function getSelectedFiltroSpecField(row) {
+    const feature = getSelectedFiltroSpecFeature(row);
+    const fieldKey = row?.querySelector("[data-asset-spec-filter-field]")?.value || "";
+    if (!feature || !fieldKey) return null;
+    return getFeatureFieldSchema(feature).find(field => String(getSchemaFieldKey(field)) === String(fieldKey)) || null;
+}
+
+function getFiltroSpecValorType(row) {
+    const field = getSelectedFiltroSpecField(row);
+    if (field) return getSchemaFieldType(field);
+    const feature = getSelectedFiltroSpecFeature(row);
+    return String(feature ? getFeatureType(feature) : "text").toLowerCase();
+}
+
+function renderSpecFilterOperators(type) {
+    const normalizedType = String(type || "text").toLowerCase();
+    const operatorSets = {
+        number: [
+            ["equals", "Igual a"], ["gt", "Maior que"], ["gte", "Maior ou igual"],
+            ["lt", "Menor que"], ["lte", "Menor ou igual"], ["exists", "Tem valor"]
+        ],
+        date: [
+            ["equals", "Na data"], ["before", "Antes de"], ["after", "Depois de"], ["exists", "Tem valor"]
+        ],
+        boolean: [["equals", "Igual a"], ["exists", "Tem valor"]],
+        select: [["equals", "Igual a"], ["not_equals", "Diferente de"], ["exists", "Tem valor"]],
+        text: [["contains", "Contém"], ["equals", "Igual a"], ["not_contains", "Não contém"], ["exists", "Tem valor"]]
+    };
+    const options = operatorSets[normalizedType] || operatorSets.text;
+    return options.map(([value, label]) => `<option value="${escapeHTML(value)}">${escapeHTML(label)}</option>`).join("");
+}
+
+function popularCamposFiltroSpec(row, selectedFieldKey = "") {
+    const fieldWrapper = row?.querySelector("[data-asset-spec-filter-field-wrap]");
+    const fieldSelect = row?.querySelector("[data-asset-spec-filter-field]");
+    const feature = getSelectedFiltroSpecFeature(row);
+    if (!fieldWrapper || !fieldSelect) return;
+
+    const schema = feature ? getFeatureFieldSchema(feature) : [];
+    if (!schema.length) {
+        fieldWrapper.classList.add("hidden");
+        fieldSelect.innerHTML = "";
+        fieldSelect.value = "";
+        return;
+    }
+
+    fieldWrapper.classList.remove("hidden");
+    fieldSelect.innerHTML = renderSelectEmptyOption("Qualquer campo", { selected: !selectedFieldKey }) + schema.map(field => {
+        const label = getSchemaFieldLabel(field);
+        const type = getSchemaFieldType(field);
+        const unit = getSchemaFieldUnit(field);
+        return `<option value="${escapeHTML(getSchemaFieldKey(field))}">${escapeHTML(label)}${unit ? ` (${escapeHTML(unit)})` : ""} · ${escapeHTML(FEATURE_TYPE_LABELS[type] || (type === "select" ? "Opções" : type))}</option>`;
+    }).join("");
+
+    if (schema.some(field => String(getSchemaFieldKey(field)) === String(selectedFieldKey))) {
+        fieldSelect.value = selectedFieldKey;
+    }
+}
+
+function atualizarOperadoresFiltroSpec(row, selectedOperator = "") {
+    const operatorSelect = row?.querySelector("[data-asset-spec-filter-operator]");
+    if (!operatorSelect) return;
+
+    const previous = selectedOperator || operatorSelect.value || "";
+    operatorSelect.innerHTML = renderSpecFilterOperators(getFiltroSpecValorType(row));
+    if (Array.from(operatorSelect.options).some(option => option.value === previous)) {
+        operatorSelect.value = previous;
+    }
+}
+
+function configurarValorFiltroSpec(row) {
+    const valueInput = row?.querySelector("[data-asset-spec-filter-value]");
+    if (!valueInput) return;
+
+    const type = getFiltroSpecValorType(row);
+    const field = getSelectedFiltroSpecField(row);
+    const operator = row?.querySelector("[data-asset-spec-filter-operator]")?.value || "contains";
+    const doesNotNeedValue = operator === "exists";
+
     valueInput.disabled = doesNotNeedValue;
     valueInput.classList.toggle("opacity-50", doesNotNeedValue);
-    valueInput.placeholder = doesNotNeedValue ? "Não precisa de valor" : "Ex.: 16GB, DDR4, 2026-12-31";
-    if (doesNotNeedValue) valueInput.value = "";
+
+    if (doesNotNeedValue) {
+        valueInput.value = "";
+        valueInput.type = "text";
+        valueInput.placeholder = "Não precisa de valor";
+        return;
+    }
+
+    if (type === "number") {
+        valueInput.type = "number";
+        valueInput.placeholder = "Ex.: 16, 3200, 6000";
+    } else if (type === "date") {
+        valueInput.type = "date";
+        valueInput.placeholder = "aaaa-mm-dd";
+    } else if (type === "boolean") {
+        valueInput.type = "text";
+        valueInput.placeholder = "Sim ou Não";
+    } else if (type === "select") {
+        valueInput.type = "text";
+        const options = field ? getSchemaFieldOptions(field) : [];
+        valueInput.placeholder = options.length ? `Ex.: ${options.slice(0, 3).join(", ")}` : "Valor da opção";
+    } else {
+        valueInput.type = "text";
+        valueInput.placeholder = "Ex.: Kingston, DDR4, 16GB";
+    }
+}
+
+function atualizarLinhaFiltroSpec(row, options = {}) {
+    const selectedFieldKey = options.fieldKey !== undefined
+        ? options.fieldKey
+        : row?.querySelector("[data-asset-spec-filter-field]")?.value || "";
+    const selectedOperator = options.operator !== undefined
+        ? options.operator
+        : row?.querySelector("[data-asset-spec-filter-operator]")?.value || "";
+
+    popularCamposFiltroSpec(row, selectedFieldKey);
+    atualizarOperadoresFiltroSpec(row, selectedOperator);
+    configurarValorFiltroSpec(row);
+}
+
+function atualizarVisibilidadeValorFiltroSpec(row) {
+    configurarValorFiltroSpec(row);
 }
 
 function adicionarFiltroSpecAtivo(filtro = {}) {
@@ -801,24 +935,17 @@ function adicionarFiltroSpecAtivo(filtro = {}) {
                     <label class="text-xs font-black uppercase tracking-wide text-blue-900">Característica</label>
                     <select class="min-h-10 rounded-xl border-2 border-blue-900 bg-white px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-900/20" data-asset-spec-filter-feature></select>
                 </div>
+                <div class="flex flex-col gap-1 hidden" data-asset-spec-filter-field-wrap>
+                    <label class="text-xs font-black uppercase tracking-wide text-blue-900">Campo da feature</label>
+                    <select class="min-h-10 rounded-xl border-2 border-blue-900 bg-white px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-900/20" data-asset-spec-filter-field></select>
+                </div>
                 <div class="flex flex-col gap-1">
                     <label class="text-xs font-black uppercase tracking-wide text-blue-900">Operador</label>
-                    <select class="min-h-10 rounded-xl border-2 border-blue-900 bg-white px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-900/20" data-asset-spec-filter-operator>
-                        <option value="contains">Contém</option>
-                        <option value="equals">Igual a</option>
-                        <option value="not_contains">Não contém</option>
-                        <option value="gt">Maior que</option>
-                        <option value="gte">Maior ou igual</option>
-                        <option value="lt">Menor que</option>
-                        <option value="lte">Menor ou igual</option>
-                        <option value="before">Antes de</option>
-                        <option value="after">Depois de</option>
-                        <option value="exists">Tem valor</option>
-                    </select>
+                    <select class="min-h-10 rounded-xl border-2 border-blue-900 bg-white px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-900/20" data-asset-spec-filter-operator></select>
                 </div>
                 <div class="flex flex-col gap-1">
                     <label class="text-xs font-black uppercase tracking-wide text-blue-900">Valor</label>
-                    <input type="text" class="min-h-10 rounded-xl border-2 border-blue-900 bg-white px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-900/20 disabled:cursor-not-allowed" data-asset-spec-filter-value placeholder="Ex.: 16GB, DDR4, 2026-12-31">
+                    <input type="text" class="min-h-10 rounded-xl border-2 border-blue-900 bg-white px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-900/20 disabled:cursor-not-allowed" data-asset-spec-filter-value placeholder="Ex.: Kingston, DDR4, 16GB">
                 </div>
                 <button type="button" class="${ASSET_SPEC_FILTER_REMOVE_CLASS}" data-asset-spec-filter-remove aria-label="Remover filtro" title="Remover filtro">×</button>
             `;
@@ -828,19 +955,24 @@ function adicionarFiltroSpecAtivo(filtro = {}) {
     popularOpcoesFeaturesSpecsAtivos();
 
     const featureSelect = row.querySelector("[data-asset-spec-filter-feature]");
-    const operatorSelect = row.querySelector("[data-asset-spec-filter-operator]");
+    const fieldSelect = row.querySelector("[data-asset-spec-filter-field]");
     const valueInput = row.querySelector("[data-asset-spec-filter-value]");
 
     if (featureSelect && filtro.feature_id) featureSelect.value = String(filtro.feature_id);
-    if (operatorSelect && filtro.operator) operatorSelect.value = String(filtro.operator);
+    atualizarLinhaFiltroSpec(row, { fieldKey: filtro.field_key || "", operator: filtro.operator || "" });
+    if (fieldSelect && filtro.field_key) fieldSelect.value = String(filtro.field_key);
     if (valueInput && filtro.value !== undefined) valueInput.value = String(filtro.value);
     if (featureSelect && !featureSelect.value) featureSelect.focus();
 
     row.querySelectorAll("select, input").forEach(input => {
         const eventName = input.tagName === "SELECT" ? "change" : "input";
         input.addEventListener(eventName, () => {
-            if (input.matches("[data-asset-spec-filter-operator]")) {
-                atualizarVisibilidadeValorFiltroSpec(row);  
+            if (input.matches("[data-asset-spec-filter-feature]")) {
+                atualizarLinhaFiltroSpec(row, { fieldKey: "", operator: "" });
+            } else if (input.matches("[data-asset-spec-filter-field]")) {
+                atualizarLinhaFiltroSpec(row, { fieldKey: input.value, operator: "" });
+            } else if (input.matches("[data-asset-spec-filter-operator]")) {
+                atualizarVisibilidadeValorFiltroSpec(row);
             }
             resetarPaginaTabela("assets");
             agendarRenderAssetsTable();
@@ -875,15 +1007,20 @@ function garantirMensagemFiltrosSpecsAtivos() {
 function recolherFiltrosSpecsAtivos() {
     return Array.from(document.querySelectorAll("[data-asset-spec-filter-row]")).map(row => {
         const featureSelect = row.querySelector("[data-asset-spec-filter-feature]");
+        const fieldSelect = row.querySelector("[data-asset-spec-filter-field]");
         const operatorSelect = row.querySelector("[data-asset-spec-filter-operator]");
         const valueInput = row.querySelector("[data-asset-spec-filter-value]");
         const featureId = featureSelect?.value || "";
         const selectedOption = featureSelect?.selectedOptions?.[0];
         const featureName = selectedOption ? selectedOption.textContent.split("·").pop().replace(/\([^)]*\)/g, "").trim() : "";
+        const fieldKey = fieldSelect?.value || "";
+        const fieldLabel = fieldSelect?.selectedOptions?.[0]?.textContent?.split("·")?.[0]?.trim() || "";
 
         return {
             feature_id: featureId,
             feature_name: featureName,
+            field_key: fieldKey,
+            field_label: fieldLabel,
             operator: operatorSelect?.value || "contains",
             value: valueInput?.value?.trim() || ""
         };
@@ -1516,25 +1653,69 @@ function getAssetSpecRawValue(asset, feature) {
     return matchingKey ? specs[matchingKey] : "";
 }
 
-function formatSpecValueForTable(feature, rawValue) {
+function formatStructuredSpecValueForTable(feature, rawValue) {
+    const schema = getFeatureFieldSchema(feature);
     const values = decodeSpecValue(rawValue)
-        .filter(value => value !== undefined && value !== null && String(value).trim() !== "");
+        .map(parseSpecStructuredValue)
+        .filter(item => Object.keys(item).length > 0);
 
     if (!values.length) {
         return `<span class="text-xs font-semibold text-gray-400">—</span>`;
     }
 
-    const formattedValues = values.map(value => formatBooleanSpecValue(value));
+    const visibleValues = values.slice(0, 2);
+    const remainingCount = values.length - visibleValues.length;
+    return `
+        <div class="min-w-64 max-w-[28rem] space-y-1.5">
+            ${visibleValues.map((item, index) => {
+                const fields = schema.map(field => {
+                    const key = getSchemaFieldKey(field);
+                    const formatted = formatStructuredFieldValue(item[key], field);
+                    if (!formatted) return "";
+                    return `
+                        <span class="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-gray-800 ring-1 ring-gray-200">
+                            <strong class="text-blue-900">${escapeHTML(getSchemaFieldLabel(field))}:</strong>
+                            ${escapeHTML(formatted)}
+                        </span>
+                    `;
+                }).filter(Boolean).join("");
+
+                return `
+                    <div class="rounded-xl border border-blue-100 bg-blue-50/40 p-2" title="${escapeHTML(formatStructuredSpecValue(feature, item)[0] || "")}">
+                        ${values.length > 1 ? `<div class="mb-1 text-[10px] font-black uppercase tracking-wide text-blue-900">Valor ${index + 1}</div>` : ""}
+                        <div class="flex flex-wrap gap-1">${fields || `<span class="text-xs font-semibold text-gray-400">—</span>`}</div>
+                    </div>
+                `;
+            }).join("")}
+            ${remainingCount > 0 ? `<span class="inline-flex rounded-full bg-blue-900 px-2.5 py-1 text-[11px] font-black text-white">+${remainingCount} valor${remainingCount === 1 ? "" : "es"}</span>` : ""}
+        </div>
+    `;
+}
+
+function formatSpecValueForTable(feature, rawValue) {
+    let formattedValues;
+
+    if (hasFeatureFieldSchema(feature)) {
+        return formatStructuredSpecValueForTable(feature, rawValue);
+    } else {
+        const values = decodeSpecValue(rawValue)
+            .filter(value => value !== undefined && value !== null && String(value).trim() !== "");
+        formattedValues = values.map(value => formatBooleanSpecValue(value));
+    }
+
+    if (!formattedValues.length) {
+        return `<span class="text-xs font-semibold text-gray-400">—</span>`;
+    }
 
     if (formattedValues.length === 1) {
-        return `<span class="block max-w-44 truncate text-sm font-semibold text-gray-900" title="${escapeHTML(formattedValues[0])}">${escapeHTML(formattedValues[0])}</span>`;
+        return `<span class="block max-w-56 truncate text-sm font-semibold text-gray-900" title="${escapeHTML(formattedValues[0])}">${escapeHTML(formattedValues[0])}</span>`;
     }
 
     const visibleValues = formattedValues.slice(0, 3);
     const remainingCount = formattedValues.length - visibleValues.length;
 
     return `
-        <div class="flex max-w-56 flex-wrap gap-1">
+        <div class="flex max-w-64 flex-wrap gap-1">
             ${visibleValues.map(value => `<span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-800" title="${escapeHTML(value)}">${escapeHTML(value)}</span>`).join("")}
             ${remainingCount > 0 ? `<span class="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-900">+${remainingCount}</span>` : ""}
         </div>
@@ -1770,7 +1951,10 @@ function renderLogsTable() {
                     <td>${escapeHTML(getLogTableLabel(log))}</td>
                     <td>
                         <div class="font-semibold text-gray-900">${escapeHTML(getLogDetails(log))}</div>
-                        <div class="mt-2">${renderTableActions([{ label: "Detalhe", variant: "secondary", title: "Ver detalhe do registo", attrs: { "data-log-action": "view", "data-log-id": getLogId(log) } }])}</div>
+                        <div class="mt-2">${renderTableActions([
+                            { label: "Detalhe", variant: "secondary", title: "Ver detalhe do registo", attrs: { "data-log-action": "view", "data-log-id": getLogId(log) } },
+                            ...(canRollbackLog(log) ? [{ label: "Reverter", variant: "danger", title: getLogRollbackLabel(log), attrs: { "data-log-action": "rollback", "data-log-id": getLogId(log) } }] : [])
+                        ])}</div>
                     </td>
                 </tr>
             `).join("");
@@ -2504,6 +2688,18 @@ function getLogDate(log) {
     return primeiroValor(log, ["created_at", "timestamp", "date", "data_hora", "data", "datetime"], "");
 }
 
+function getLogRecordId(log) {
+    return primeiroValor(log, ["record_id", "entity_id", "target_id"], "");
+}
+
+function getLogRecordLabel(log) {
+    return primeiroValor(log, ["record_label", "entity_label", "target_label"], `${getLogTableLabel(log)} #${getLogRecordId(log)}`);
+}
+
+function getLogOriginLabel(log) {
+    return primeiroValor(log, ["origin_label", "origem_label"], primeiroValor(log, ["origin", "origem"], "Sistema"));
+}
+
 function getLogUser(log) {
     return primeiroValor(log, ["user_email", "email", "user", "utilizador", "username"], "Sistema");
 }
@@ -2520,12 +2716,30 @@ function getLogTable(log) {
     return primeiroValor(log, ["table_name", "table", "tabela"], "Registo");
 }
 
+function isUserCreationLog(log) {
+    return String(getLogTable(log) || "").toLowerCase() === "users" && String(getLogAction(log) || "").toUpperCase() === "INSERT";
+}
+
 function getLogTableLabel(log) {
     return primeiroValor(log, ["table_label", "tabela_label", "table_name_label"], getLogTable(log));
 }
 
 function getLogDetails(log) {
     return primeiroValor(log, ["details", "detalhes", "description", "descricao", "message"], "");
+}
+
+function canRollbackLog(log) {
+    if (isUserCreationLog(log)) return false;
+    return primeiroValor(log, ["can_rollback", "rollback_available"], false) === true;
+}
+
+function getLogRollbackReason(log) {
+    if (isUserCreationLog(log)) return "Criação de utilizadores não pode ser revertida.";
+    return primeiroValor(log, ["rollback_reason"], "Rollback indisponível.");
+}
+
+function getLogRollbackLabel(log) {
+    return primeiroValor(log, ["rollback_label"], "Rollback");
 }
 
 function formatarData(valor) {
@@ -2650,7 +2864,19 @@ function abrirModal(modalId) {
     }
 
     modal.classList.remove("hidden");
-    modal.classList.add("flex");
+    modal.classList.add("admin-modal-open", "flex");
+    modal.style.display = "flex";
+    modal.style.position = "fixed";
+    modal.style.top = "0";
+    modal.style.right = "0";
+    modal.style.bottom = "0";
+    modal.style.left = "0";
+    modal.style.zIndex = "1000";
+    modal.style.alignItems = "center";
+    modal.style.justifyContent = "center";
+    modal.style.background = "rgba(0, 0, 0, 0.40)";
+    modal.style.padding = "1rem";
+    modal.style.overflowY = "auto";
     modal.setAttribute("aria-hidden", "false");
 }
 
@@ -2659,7 +2885,8 @@ function fecharModal(modalId) {
     if (!modal) return;
 
     modal.classList.add("hidden");
-    modal.classList.remove("flex");
+    modal.classList.remove("admin-modal-open", "flex");
+    modal.style.display = "none";
     modal.setAttribute("aria-hidden", "true");
 }
 
@@ -2774,11 +3001,174 @@ function getFeatureType(feature) {
     return primeiroValor(feature, ["feature_type", "type", "tipo"], "text");
 }
 
+function getFeatureFieldSchema(feature) {
+    const schema = primeiroValor(feature, ["field_schema", "schema", "fields", "campos"], []);
+    if (Array.isArray(schema)) return schema;
+
+    if (typeof schema === "string" && schema.trim()) {
+        try {
+            const parsed = JSON.parse(schema);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+            return [];
+        }
+    }
+
+    return [];
+}
+
+function hasFeatureFieldSchema(feature) {
+    return getFeatureFieldSchema(feature).length > 0;
+}
+
+function getSchemaFieldKey(field) {
+    return primeiroValor(field, ["key", "field_key", "id", "name", "nome"], "");
+}
+
+function getSchemaFieldLabel(field) {
+    return primeiroValor(field, ["label", "field_label", "name", "nome"], getSchemaFieldKey(field) || "Campo");
+}
+
+function getSchemaFieldType(field) {
+    return String(primeiroValor(field, ["type", "field_type", "tipo"], "text") || "text").toLowerCase();
+}
+
+function isSchemaFieldRequired(field) {
+    const value = primeiroValor(field, ["required", "obrigatorio"], false);
+    if (typeof value === "boolean") return value;
+    return ["true", "1", "sim", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
+
+function getSchemaFieldUnit(field) {
+    return primeiroValor(field, ["unit", "unidade"], "");
+}
+
+function getSchemaFieldOptions(field) {
+    const options = primeiroValor(field, ["options", "opcoes", "choices"], []);
+    if (Array.isArray(options)) return options.map(option => String(option || "").trim()).filter(Boolean);
+    if (typeof options === "string") {
+        return options.split(options.includes("\n") ? "\n" : ",").map(option => option.trim()).filter(Boolean);
+    }
+    return [];
+}
+
+function parseSpecStructuredValue(value) {
+    if (value && typeof value === "object" && !Array.isArray(value)) return value;
+    if (typeof value === "string" && value.trim()) {
+        try {
+            const parsed = JSON.parse(value);
+            return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+        } catch (error) {
+            return {};
+        }
+    }
+    return {};
+}
+
+function formatStructuredFieldValue(value, field) {
+    if (value === undefined || value === null || String(value).trim() === "") return "";
+    let displayValue = value === true ? "Sim" : value === false ? "Não" : String(value);
+    const unit = getSchemaFieldUnit(field);
+    if (unit && displayValue !== "Sim" && displayValue !== "Não") displayValue = `${displayValue} ${unit}`;
+    return displayValue;
+}
+
+function formatStructuredSpecValue(feature, rawValue) {
+    const schema = getFeatureFieldSchema(feature);
+    const values = decodeSpecValue(rawValue)
+        .map(parseSpecStructuredValue)
+        .filter(item => Object.keys(item).length > 0);
+
+    if (!values.length) return [];
+
+    return values.map(item => {
+        const parts = schema.map(field => {
+            const key = getSchemaFieldKey(field);
+            const formatted = formatStructuredFieldValue(item[key], field);
+            return formatted ? `${getSchemaFieldLabel(field)}: ${formatted}` : "";
+        }).filter(Boolean);
+        return parts.join("; ");
+    }).filter(Boolean);
+}
+
+function getStructuredSpecValues(feature, rawValue) {
+    const values = decodeSpecValue(rawValue)
+        .map(parseSpecStructuredValue)
+        .filter(item => Object.keys(item).length > 0);
+    return values;
+}
+
+function renderStructuredSpecValueForDetail(feature, rawValue) {
+    const schema = getFeatureFieldSchema(feature);
+    const values = getStructuredSpecValues(feature, rawValue);
+
+    if (!values.length) return `<span class="text-gray-400">-</span>`;
+
+    return `
+        <div class="space-y-3">
+            ${values.map((item, index) => `
+                <div class="rounded-xl border border-blue-100 bg-white p-3 shadow-sm">
+                    ${values.length > 1 ? `<p class="mb-2 text-[11px] font-black uppercase text-blue-900">Valor ${index + 1}</p>` : ""}
+                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        ${schema.map(field => {
+                            const key = getSchemaFieldKey(field);
+                            const formatted = formatStructuredFieldValue(item[key], field) || "-";
+                            return `
+                                <div class="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                                    <p class="text-[10px] font-black uppercase tracking-wide text-blue-900">${escapeHTML(getSchemaFieldLabel(field))}</p>
+                                    <p class="mt-1 break-words text-sm font-semibold text-gray-900">${escapeHTML(formatted)}</p>
+                                </div>
+                            `;
+                        }).join("")}
+                    </div>
+                </div>
+            `).join("")}
+        </div>
+    `;
+}
+
+
 function inputTypeForFeature(featureType) {
     const type = String(featureType || "text").toLowerCase();
     if (type === "number") return "number";
     if (type === "date") return "date";
     return "text";
+}
+
+function getSpecReuseDatalistId(featureId) {
+    return `spec-values-${String(featureId).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
+function getSpecReuseCacheKey(featureId, fieldKey = "") {
+    const safeFeatureId = String(featureId || "");
+    const safeFieldKey = String(fieldKey || "");
+    return safeFieldKey ? `${safeFeatureId}::${safeFieldKey}` : safeFeatureId;
+}
+
+function renderSchemaFieldReuseSelect(feature, field) {
+    const featureId = getFeatureId(feature);
+    const fieldKey = getSchemaFieldKey(field);
+    if (!featureId || !fieldKey) return "";
+
+    return `
+                <select data-spec-existing-field-select data-feature-id="${escapeHTML(featureId)}" data-field-key="${escapeHTML(fieldKey)}" class="asset-spec-existing-field-select mt-2 w-full rounded-lg border-2 border-blue-900 bg-white px-3 py-2 text-xs font-bold text-blue-900 outline-none focus:ring-2 focus:ring-blue-900/20" disabled>
+                    <option value="">Valores registados deste campo...</option>
+                </select>
+            `;
+}
+
+function renderSpecReuseSelect(feature) {
+    const type = String(getFeatureType(feature)).toLowerCase();
+    if (type === "boolean") return "";
+
+    return `
+                    <label class="min-w-0 flex-1">
+                        <span class="mb-1 block text-[11px] font-black uppercase text-blue-900">Usar dados já registados</span>
+                        <select data-spec-existing-select data-feature-id="${escapeHTML(getFeatureId(feature))}" class="asset-spec-existing-select min-h-10 w-full rounded-lg border-2 border-blue-900 bg-white px-3 py-2 text-xs font-bold text-blue-900 outline-none focus:ring-2 focus:ring-blue-900/20" disabled>
+                            <option value="">Valores registados...</option>
+                        </select>
+                    </label>
+                `;
 }
 
 function renderFeatureInputControl(feature, value = "", extraClass = "asset-spec-value-input") {
@@ -2802,17 +3192,205 @@ function renderFeatureInputControl(feature, value = "", extraClass = "asset-spec
     }
 
     return `
-                <input data-feature-id="${escapeHTML(id)}" type="${inputTypeForFeature(type)}" value="${escapeHTML(safeValue)}" class="${extraClass} w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="Valor">
+                <input data-feature-id="${escapeHTML(id)}" list="${escapeHTML(getSpecReuseDatalistId(id))}" type="${inputTypeForFeature(type)}" value="${escapeHTML(safeValue)}" class="${extraClass} w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="Valor">
             `;
 }
 
-function renderSpecValueRow(feature, value = "", allowRemove = true) {
+function renderSchemaFieldControl(feature, field, value = "") {
+    const featureId = getFeatureId(feature);
+    const key = getSchemaFieldKey(field);
+    const type = getSchemaFieldType(field);
+    const label = getSchemaFieldLabel(field);
+    const unit = getSchemaFieldUnit(field);
+    const required = isSchemaFieldRequired(field);
+    const safeValue = value === undefined || value === null ? "" : String(value);
+    const commonClass = "asset-structured-spec-input w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20";
+    const fieldReuseSelect = renderSchemaFieldReuseSelect(feature, field);
+
+    if (type === "boolean") {
+        const normalized = safeValue.toLowerCase();
+        const selectedValue = ["true", "1", "sim", "yes"].includes(normalized)
+            ? "true"
+            : (["false", "0", "nao", "não", "no"].includes(normalized) ? "false" : "");
+        return `
+            <label class="block min-w-0">
+                <span class="mb-1 block text-[11px] font-black uppercase text-blue-900">${escapeHTML(label)}${required ? " *" : ""}</span>
+                <select data-feature-id="${escapeHTML(featureId)}" data-schema-field-key="${escapeHTML(key)}" class="${commonClass}">
+                    ${renderSelectEmptyOption("Selecionar", { asPlaceholder: true, selected: !selectedValue })}
+                    <option value="true" ${selectedValue === "true" ? "selected" : ""}>Sim</option>
+                    <option value="false" ${selectedValue === "false" ? "selected" : ""}>Não</option>
+                </select>
+                ${fieldReuseSelect}
+            </label>
+        `;
+    }
+
+    if (type === "select") {
+        const options = getSchemaFieldOptions(field);
+        return `
+            <label class="block min-w-0">
+                <span class="mb-1 block text-[11px] font-black uppercase text-blue-900">${escapeHTML(label)}${required ? " *" : ""}</span>
+                <select data-feature-id="${escapeHTML(featureId)}" data-schema-field-key="${escapeHTML(key)}" class="${commonClass}">
+                    ${renderSelectEmptyOption("Selecionar", { asPlaceholder: true, selected: !safeValue })}
+                    ${options.map(option => `<option value="${escapeHTML(option)}" ${String(option) === safeValue ? "selected" : ""}>${escapeHTML(option)}</option>`).join("")}
+                </select>
+                ${fieldReuseSelect}
+            </label>
+        `;
+    }
+
     return `
-                <div class="flex items-center gap-2">
-                    ${renderFeatureInputControl(feature, value)}
+        <label class="block min-w-0">
+            <span class="mb-1 block text-[11px] font-black uppercase text-blue-900">${escapeHTML(label)}${unit ? ` (${escapeHTML(unit)})` : ""}${required ? " *" : ""}</span>
+            <input data-feature-id="${escapeHTML(featureId)}" data-schema-field-key="${escapeHTML(key)}" type="${escapeHTML(inputTypeForFeature(type))}" value="${escapeHTML(safeValue)}" class="${commonClass}" placeholder="${escapeHTML(primeiroValor(field, ["placeholder"], ""))}">
+            ${fieldReuseSelect}
+        </label>
+    `;
+}
+
+function renderStructuredSpecValueRow(feature, value = {}, allowRemove = true) {
+    const schema = getFeatureFieldSchema(feature);
+    const structuredValue = parseSpecStructuredValue(value);
+    const reuseSelect = renderSpecReuseSelect(feature);
+
+    return `
+        <div class="asset-spec-value-row asset-structured-spec-row rounded-2xl border border-blue-100 bg-blue-50/30 p-3 shadow-sm" data-structured-spec-row>
+            <div class="asset-structured-fields-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                ${schema.map(field => renderSchemaFieldControl(feature, field, structuredValue[getSchemaFieldKey(field)])).join("")}
+            </div>
+            <div class="asset-structured-actions mt-3 grid grid-cols-1 items-end gap-2 lg:grid-cols-[minmax(0,1fr)_auto]">
+                ${reuseSelect}
+                ${allowRemove ? `<button type="button" data-spec-action="remove" class="rounded-lg border-2 border-red-600 px-3 py-2 text-xs font-bold uppercase text-red-600 hover:bg-red-50">Remover</button>` : ""}
+            </div>
+        </div>
+    `;
+}
+
+function renderSpecValueRow(feature, value = "", allowRemove = true) {
+    if (hasFeatureFieldSchema(feature)) {
+        return renderStructuredSpecValueRow(feature, value, allowRemove);
+    }
+
+    const reuseSelect = renderSpecReuseSelect(feature);
+    const hasReuseSelect = Boolean(reuseSelect.trim());
+    const rowClass = hasReuseSelect
+        ? "asset-spec-value-row asset-spec-value-row-inline grid grid-cols-1 items-start gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(11rem,0.7fr)_auto]"
+        : "asset-spec-value-row asset-spec-value-row-inline flex items-center gap-2";
+
+    return `
+                <div class="${rowClass}">
+                    <div class="min-w-0">${renderFeatureInputControl(feature, value)}</div>
+                    ${reuseSelect}
                     ${allowRemove ? `<button type="button" data-spec-action="remove" class="rounded-lg border-2 border-red-600 px-3 py-2 text-xs font-bold uppercase text-red-600 hover:bg-red-50">Remover</button>` : ""}
                 </div>
             `;
+}
+
+async function carregarValoresSpecsFeature(featureId, fieldKey = "") {
+    const featureKey = String(featureId || "");
+    const schemaFieldKey = String(fieldKey || "");
+    if (!featureKey) return [];
+
+    const cacheKey = getSpecReuseCacheKey(featureKey, schemaFieldKey);
+    if (Array.isArray(cacheValoresSpecsPorFeature[cacheKey])) return cacheValoresSpecsPorFeature[cacheKey];
+
+    try {
+        const query = schemaFieldKey ? `?field_key=${encodeURIComponent(schemaFieldKey)}` : "";
+        const json = await fetchJSON(`/assets/features/${encodeURIComponent(featureKey)}/values${query}`);
+        const values = Array.isArray(json.data) ? json.data : [];
+        cacheValoresSpecsPorFeature[cacheKey] = values;
+        return values;
+    } catch (error) {
+        console.warn(`[Dashboard] Não foi possível carregar valores registados da feature ${featureKey}:`, error);
+        cacheValoresSpecsPorFeature[cacheKey] = [];
+        return [];
+    }
+}
+
+function optionDataValue(item) {
+    return item && typeof item === "object" ? item.value : item;
+}
+
+function optionDataLabel(item) {
+    return item && typeof item === "object" ? (item.label || item.value) : item;
+}
+
+function atualizarOpcoesValoresSpec(featureId, values = [], fieldKey = "") {
+    const key = String(featureId || "");
+    const schemaFieldKey = String(fieldKey || "");
+
+    if (schemaFieldKey) {
+        document.querySelectorAll("[data-spec-existing-field-select]").forEach(select => {
+            if (String(select.dataset.featureId) !== key || String(select.dataset.fieldKey) !== schemaFieldKey) return;
+            const currentValue = select.value;
+            select.innerHTML = `<option value="">Valores registados deste campo...</option>` + values.map(item => {
+                const value = optionDataValue(item);
+                const label = optionDataLabel(item);
+                return `<option value="${escapeHTML(value)}">${escapeHTML(label)}</option>`;
+            }).join("");
+            select.disabled = values.length === 0;
+            select.value = values.some(item => String(optionDataValue(item)) === String(currentValue)) ? currentValue : "";
+        });
+        return;
+    }
+
+    const datalistId = getSpecReuseDatalistId(key);
+    const optionHtml = values.map(item => {
+        const value = optionDataValue(item);
+        const label = optionDataLabel(item);
+        return `<option value="${escapeHTML(value)}" label="${escapeHTML(label)}"></option>`;
+    }).join("");
+
+    document.querySelectorAll("datalist[data-spec-values-list]").forEach(datalist => {
+        if (datalist.id === datalistId) datalist.innerHTML = optionHtml;
+    });
+
+    document.querySelectorAll("[data-spec-existing-select]").forEach(select => {
+        if (String(select.dataset.featureId) !== key) return;
+        const currentValue = select.value;
+        select.innerHTML = `<option value="">Valores registados...</option>` + values.map(item => {
+            const value = optionDataValue(item);
+            const label = optionDataLabel(item);
+            return `<option value="${escapeHTML(value)}">${escapeHTML(label)}</option>`;
+        }).join("");
+        select.disabled = values.length === 0;
+        select.value = values.some(item => String(optionDataValue(item)) === String(currentValue)) ? currentValue : "";
+    });
+}
+
+async function hidratarValoresSpecs(features = []) {
+    await Promise.all((features || []).map(async feature => {
+        const featureId = getFeatureId(feature);
+        const featureType = String(getFeatureType(feature)).toLowerCase();
+
+        if (featureType !== "boolean") {
+            const values = await carregarValoresSpecsFeature(featureId);
+            atualizarOpcoesValoresSpec(featureId, values);
+        }
+
+        if (hasFeatureFieldSchema(feature)) {
+            await Promise.all(getFeatureFieldSchema(feature).map(async field => {
+                const fieldKey = getSchemaFieldKey(field);
+                if (!fieldKey) return;
+                const values = await carregarValoresSpecsFeature(featureId, fieldKey);
+                atualizarOpcoesValoresSpec(featureId, values, fieldKey);
+            }));
+        }
+    }));
+}
+
+function renderFeatureSchemaPreview(feature) {
+    const schema = getFeatureFieldSchema(feature);
+    if (!schema.length) return "";
+    return `
+        <div class="mt-2 flex flex-wrap gap-1">
+            ${schema.map(field => `
+                <span class="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-900 ring-1 ring-blue-100">
+                    ${escapeHTML(getSchemaFieldLabel(field))}${getSchemaFieldUnit(field) ? ` (${escapeHTML(getSchemaFieldUnit(field))})` : ""}${isSchemaFieldRequired(field) ? " *" : ""}
+                </span>
+            `).join("")}
+        </div>
+    `;
 }
 
 function renderAssetSpecsFields(features) {
@@ -2828,22 +3406,30 @@ function renderAssetSpecsFields(features) {
         const id = getFeatureId(feature);
         const name = getFeatureName(feature);
         const repeatable = isFeatureRepeatable(feature);
+        const structured = hasFeatureFieldSchema(feature);
 
         return `
-                    <div class="md:col-span-2 rounded-lg border border-blue-100 bg-white p-3" data-spec-feature-id="${escapeHTML(id)}" data-spec-feature-type="${escapeHTML(getFeatureType(feature))}" data-spec-repeatable="${repeatable ? "true" : "false"}">
-                        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-                            <div>
+                    <div class="asset-spec-feature-card md:col-span-2 rounded-lg border border-blue-100 bg-white p-3" data-spec-feature-id="${escapeHTML(id)}" data-spec-feature-type="${escapeHTML(getFeatureType(feature))}" data-spec-repeatable="${repeatable ? "true" : "false"}" data-spec-structured="${structured ? "true" : "false"}">
+                        <div class="asset-spec-feature-header mb-3 flex flex-wrap items-start justify-between gap-3">
+                            <div class="min-w-0">
                                 <label class="block text-xs font-extrabold uppercase text-blue-900">${escapeHTML(name)}</label>
-                
+                                <div class="mt-1 flex flex-wrap gap-1">
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-bold text-gray-700">${structured ? "Estruturada" : (FEATURE_TYPE_LABELS[getFeatureType(feature)] || "Texto")}</span>
+                                    ${repeatable ? `<span class="rounded-full bg-blue-900 px-2 py-0.5 text-[11px] font-bold text-white">Múltipla</span>` : ""}
+                                </div>
+                                ${renderFeatureSchemaPreview(feature)}
                             </div>
                             ${repeatable ? `<button type="button" data-spec-action="add" data-feature-id="${escapeHTML(id)}" class="rounded-lg border-2 border-blue-900 bg-white px-3 py-2 text-xs font-bold uppercase text-blue-900 hover:bg-gray-100">+ Valor</button>` : ""}
                         </div>
                         <div class="asset-spec-values space-y-2">
                             ${renderSpecValueRow(feature, "", repeatable)}
                         </div>
+                        ${String(getFeatureType(feature)).toLowerCase() !== "boolean" ? `<datalist id="${escapeHTML(getSpecReuseDatalistId(id))}" data-spec-values-list></datalist>` : ""}
                     </div>
                 `;
     }).join("");
+
+    hidratarValoresSpecs(features);
 }
 
 function decodeSpecValue(rawValue) {
@@ -2856,6 +3442,7 @@ function decodeSpecValue(rawValue) {
             try {
                 const parsed = JSON.parse(trimmed);
                 if (Array.isArray(parsed)) return parsed;
+                if (parsed && typeof parsed === "object") return [parsed];
             } catch (error) {
                 return [rawValue];
             }
@@ -2878,10 +3465,25 @@ function adicionarValorFeature(featureId, value = "") {
     if (!valuesContainer) return;
 
     valuesContainer.insertAdjacentHTML("beforeend", renderSpecValueRow(feature, value));
+    hidratarValoresSpecs([feature]);
 }
 
 function recolherValorControl(input) {
     return input ? input.value : "";
+}
+
+function recolherStructuredRowValue(row) {
+    const value = {};
+
+    row.querySelectorAll(".asset-structured-spec-input").forEach(input => {
+        const key = input.dataset.schemaFieldKey;
+        if (!key) return;
+        const inputValue = input.value;
+        if (inputValue === undefined || String(inputValue).trim() === "") return;
+        value[key] = inputValue;
+    });
+
+    return value;
 }
 
 function recolherSpecsAtivo() {
@@ -2889,13 +3491,27 @@ function recolherSpecsAtivo() {
 
     document.querySelectorAll("[data-spec-feature-id]").forEach(group => {
         const featureId = group.dataset.specFeatureId;
+        if (!featureId) return;
+
+        const isRepeatable = group.dataset.specRepeatable === "true";
+        const isStructured = group.dataset.specStructured === "true";
+
+        if (isStructured) {
+            const values = Array.from(group.querySelectorAll("[data-structured-spec-row]"))
+                .map(recolherStructuredRowValue)
+                .filter(value => Object.keys(value).length > 0);
+
+            if (!values.length) return;
+            specs[featureId] = isRepeatable ? values : values[0];
+            return;
+        }
+
         const values = Array.from(group.querySelectorAll(".asset-spec-value-input"))
             .map(recolherValorControl)
             .filter(value => value !== undefined && String(value).trim() !== "");
 
-        if (!featureId || !values.length) return;
+        if (!values.length) return;
 
-        const isRepeatable = group.dataset.specRepeatable === "true";
         specs[featureId] = isRepeatable ? values : values[0];
     });
 
@@ -2912,6 +3528,66 @@ async function atualizarCamposSpecsDoAtivo() {
 
     const features = await carregarFeaturesCategoria(categoryId);
     renderAssetSpecsFields(features);
+    atualizarSeletorAtivoExistente();
+}
+
+function adicionarLinhaCampoFeatureCategoria(featureRow, field = {}) {
+    const container = featureRow?.querySelector("[data-category-feature-schema-rows]");
+    if (!container) return null;
+
+    const row = document.createElement("div");
+    row.className = "grid grid-cols-1 gap-2 rounded-xl border border-blue-100 bg-white p-3 md:grid-cols-2 xl:grid-cols-[minmax(11rem,1fr)_minmax(8rem,0.65fr)_minmax(7rem,0.5fr)_minmax(12rem,1fr)_minmax(7rem,auto)_auto]";
+    row.dataset.schemaFieldRow = "true";
+    row.innerHTML = `
+        <label class="block min-w-0">
+            <span class="mb-1 block text-[11px] font-black uppercase text-blue-900">Campo</span>
+            <input type="text" data-schema-field-label value="${escapeHTML(getSchemaFieldLabel(field) === "Campo" && !getSchemaFieldKey(field) ? "" : getSchemaFieldLabel(field))}" class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="Ex.: Velocidade">
+        </label>
+        <label class="block min-w-0">
+            <span class="mb-1 block text-[11px] font-black uppercase text-blue-900">Tipo</span>
+            <select data-schema-field-type class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-900/20">
+                <option value="text">Texto</option>
+                <option value="number">Número</option>
+                <option value="boolean">Sim/Não</option>
+                <option value="date">Data</option>
+                <option value="select">Opções</option>
+            </select>
+        </label>
+        <label class="block min-w-0">
+            <span class="mb-1 block text-[11px] font-black uppercase text-blue-900">Unidade</span>
+            <input type="text" data-schema-field-unit value="${escapeHTML(getSchemaFieldUnit(field))}" class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="GB, MHz">
+        </label>
+        <label class="block min-w-0">
+            <span class="mb-1 block text-[11px] font-black uppercase text-blue-900">Opções fixas</span>
+            <input type="text" data-schema-field-options value="${escapeHTML(getSchemaFieldOptions(field).join(", "))}" class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="DDR4, DDR5">
+        </label>
+        <label class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 text-xs font-black uppercase text-blue-900 xl:self-end">
+            <input type="checkbox" data-schema-field-required class="h-4 w-4 rounded border-blue-200 text-blue-900 focus:ring-blue-900">
+            Obrigatório
+        </label>
+        <button type="button" data-schema-field-remove class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-red-200 bg-white text-lg font-black text-red-700 hover:border-red-600 hover:bg-red-50 xl:self-end" title="Remover campo">×</button>
+    `;
+
+    const typeSelect = row.querySelector("[data-schema-field-type]");
+    if (typeSelect) typeSelect.value = getSchemaFieldType(field);
+
+    const requiredCheckbox = row.querySelector("[data-schema-field-required]");
+    if (requiredCheckbox) requiredCheckbox.checked = isSchemaFieldRequired(field);
+
+    row.querySelector("[data-schema-field-remove]")?.addEventListener("click", () => row.remove());
+    container.appendChild(row);
+    return row;
+}
+
+function recolherCamposFeatureCategoria(featureRow) {
+    return Array.from(featureRow.querySelectorAll("[data-schema-field-row]")).map(row => {
+        const label = row.querySelector("[data-schema-field-label]")?.value?.trim() || "";
+        const type = row.querySelector("[data-schema-field-type]")?.value || "text";
+        const unit = row.querySelector("[data-schema-field-unit]")?.value?.trim() || "";
+        const options = row.querySelector("[data-schema-field-options]")?.value?.trim() || "";
+        const required = Boolean(row.querySelector("[data-schema-field-required]")?.checked);
+        return { label, type, unit, options, required };
+    }).filter(field => field.label);
 }
 
 function adicionarLinhaFeatureCategoria(feature = {}) {
@@ -2928,7 +3604,7 @@ function adicionarLinhaFeatureCategoria(feature = {}) {
                     <input type="text" data-category-feature-name value="${escapeHTML(getFeatureName(feature) === "Característica" && !getFeatureRawName(feature) ? "" : getFeatureName(feature))}" class="w-full min-w-0 rounded-lg border-2 border-blue-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="Ex.: CPU, RAM, Licença">
                 </div>
                 <div class="${CATEGORY_FEATURE_FIELD_CLASS}">
-                    <label class="text-xs font-black uppercase tracking-wide text-blue-900">Formato</label>
+                    <label class="text-xs font-black uppercase tracking-wide text-blue-900">Formato simples</label>
                     <select data-category-feature-type class="w-full min-w-0 rounded-lg border-2 border-blue-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-900/20">
                         <option value="text">Texto</option>
                         <option value="number">Número</option>
@@ -2936,11 +3612,21 @@ function adicionarLinhaFeatureCategoria(feature = {}) {
                         <option value="date">Data</option>
                     </select>
                 </div>
-                <label class="${CATEGORY_FEATURE_REPEATABLE_CLASS}" title="Permitir vários valores para esta característica">
+                <label class="${CATEGORY_FEATURE_REPEATABLE_CLASS}" title="Permitir vários valores/grupos para esta característica">
                     <input type="checkbox" data-category-feature-repeatable class="h-4 w-4 rounded border-blue-200 text-blue-900 focus:ring-blue-900">
                     <span>Múltipla</span>
                 </label>
-                <button type="button" class="${CATEGORY_FEATURE_REMOVE_CLASS}" title="Remover feature" aria-label="Remover feature">×</button>
+                <button type="button" data-category-feature-remove class="${CATEGORY_FEATURE_REMOVE_CLASS}" title="Remover feature" aria-label="Remover feature">×</button>
+                <div class="md:col-span-2 lg:col-span-4 rounded-xl border border-dashed border-blue-200 bg-blue-50/40 p-3" data-category-feature-schema-section>
+                    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <p class="text-xs font-black uppercase text-blue-900">Campos obrigatórios/opcionais desta feature</p>
+                            <p class="text-[11px] font-semibold text-gray-500">Quem cria ativos vai preencher exatamente estes campos. Ex.: RAM → Quantidade, Tamanho, Velocidade, Marca.</p>
+                        </div>
+                        <button type="button" data-category-feature-add-field class="rounded-lg border-2 border-blue-900 bg-white px-3 py-2 text-xs font-black uppercase text-blue-900 hover:bg-gray-100">+ Campo</button>
+                    </div>
+                    <div class="space-y-2" data-category-feature-schema-rows></div>
+                </div>
             `;
 
     const select = row.querySelector("[data-category-feature-type]");
@@ -2949,8 +3635,14 @@ function adicionarLinhaFeatureCategoria(feature = {}) {
     const repeatableCheckbox = row.querySelector("[data-category-feature-repeatable]");
     if (repeatableCheckbox) repeatableCheckbox.checked = isFeatureRepeatable(feature);
 
-    const removeBtn = row.querySelector("button");
+    const removeBtn = row.querySelector("[data-category-feature-remove]");
     if (removeBtn) removeBtn.addEventListener("click", () => row.remove());
+
+    const addFieldButton = row.querySelector("[data-category-feature-add-field]");
+    if (addFieldButton) addFieldButton.addEventListener("click", () => adicionarLinhaCampoFeatureCategoria(row));
+
+    const schema = getFeatureFieldSchema(feature);
+    schema.forEach(field => adicionarLinhaCampoFeatureCategoria(row, field));
 
     container.appendChild(row);
 }
@@ -2979,7 +3671,8 @@ function recolherFeaturesCategoria() {
         const featureType = row.querySelector("[data-category-feature-type]")?.value || "text";
         const isRepeatable = Boolean(row.querySelector("[data-category-feature-repeatable]")?.checked);
         const featureId = row.dataset.featureId || "";
-        const payload = { feature_name: name, feature_type: featureType, is_repeatable: isRepeatable };
+        const fieldSchema = recolherCamposFeatureCategoria(row);
+        const payload = { feature_name: name, feature_type: featureType, is_repeatable: isRepeatable, field_schema: fieldSchema };
 
         if (featureId) payload.feature_id = Number(featureId);
 
@@ -2999,6 +3692,7 @@ function definirModoModalAtivo(asset = null) {
     const submitButton = document.getElementById("modalAtivoSubmit");
     const serialInput = document.getElementById("new-asset-serial");
     const serialHelp = document.getElementById("assetSerialHelp");
+    const modeHint = document.getElementById("assetModeHint");
 
     if (editingIdInput) editingIdInput.value = asset ? String(getAssetId(asset)) : "";
     if (title) title.innerText = asset ? "Editar Ativo" : "Novo Ativo";
@@ -3010,10 +3704,10 @@ function definirModoModalAtivo(asset = null) {
         serialInput.classList.toggle("cursor-not-allowed", Boolean(asset));
     }
 
-    if (serialHelp) {
-        serialHelp.classList.toggle("hidden", !asset);
-    }
+    if (serialHelp) serialHelp.classList.toggle("hidden", !asset);
+    if (modeHint) modeHint.textContent = asset ? "Edição de ativo" : "Registo individual";
 }
+
 
 function definirValorControl(input, rawValue) {
     if (!input) return;
@@ -3034,7 +3728,7 @@ function preencherSpecsAtivo(asset) {
 
     details.forEach(detail => {
         const featureId = getFeatureId(detail);
-        const value = primeiroValor(detail, ["spec_value", "value", "valor"], "");
+        const value = primeiroValor(detail, ["content", "spec_value", "value", "valor"], "");
         if (featureId) specsByFeatureId[String(featureId)] = value;
     });
 
@@ -3068,6 +3762,100 @@ function preencherSpecsAtivo(asset) {
             valuesContainer.insertAdjacentHTML("beforeend", renderSpecValueRow(feature, "", repeatable));
         }
     });
+
+    if (features.length) hidratarValoresSpecs(features);
+}
+
+function resetarSeletorAtivoExistente() {
+    const block = document.getElementById("assetExistingTemplateBlock");
+    const select = document.getElementById("asset-existing-template-select");
+    if (block) block.classList.add("hidden");
+    if (select) {
+        select.innerHTML = `<option value="">Seleciona uma categoria primeiro...</option>`;
+        select.value = "";
+        select.disabled = true;
+    }
+}
+
+function formatAssetTemplateOption(asset) {
+    const pieces = [getAssetCode(asset), getAssetLocation(asset), getAssetStatus(asset)]
+        .map(value => String(value || "").trim())
+        .filter(Boolean);
+    return pieces.join(" · ") || `Ativo #${getAssetId(asset)}`;
+}
+
+async function carregarAtivosRegistadosCategoria(categoryId) {
+    const key = String(categoryId || "");
+    if (!key) return [];
+    if (Array.isArray(cacheAtivosRegistadosPorCategoria[key])) return cacheAtivosRegistadosPorCategoria[key];
+
+    const values = await fetchArray(`/assets/categories/${encodeURIComponent(key)}/registered-assets?limit=${ASSET_TEMPLATE_OPTION_LIMIT}`);
+    cacheAtivosRegistadosPorCategoria[key] = values;
+    return values;
+}
+
+async function atualizarSeletorAtivoExistente() {
+    const categoryId = document.getElementById("new-asset-category")?.value || "";
+    const editingAssetId = document.getElementById("editing-asset-id")?.value || "";
+    const block = document.getElementById("assetExistingTemplateBlock");
+    const select = document.getElementById("asset-existing-template-select");
+
+    if (!block || !select) return;
+    if (!categoryId || editingAssetId) {
+        resetarSeletorAtivoExistente();
+        return;
+    }
+
+    block.classList.remove("hidden");
+    select.disabled = true;
+    select.innerHTML = `<option value="">A carregar ativos registados...</option>`;
+
+    try {
+        const assets = await carregarAtivosRegistadosCategoria(categoryId);
+        if (!assets.length) {
+            select.innerHTML = `<option value="">Sem ativos registados nesta categoria</option>`;
+            select.disabled = true;
+            return;
+        }
+
+        select.innerHTML = `<option value="">Preencher através de um ativo existente...</option>` + assets.map(asset =>
+            `<option value="${escapeHTML(getAssetId(asset))}">${escapeHTML(formatAssetTemplateOption(asset))}</option>`
+        ).join("");
+        select.disabled = false;
+    } catch (error) {
+        console.warn("[Dashboard] Não foi possível carregar ativos registados da categoria:", error);
+        select.innerHTML = `<option value="">Não foi possível carregar ativos existentes</option>`;
+        select.disabled = true;
+    }
+}
+
+async function aplicarAtivoExistenteSelecionado(assetId) {
+    const categoryId = document.getElementById("new-asset-category")?.value || "";
+    if (!categoryId || !assetId) return;
+
+    const assets = await carregarAtivosRegistadosCategoria(categoryId);
+    const asset = assets.find(item => String(getAssetId(item)) === String(assetId));
+    if (!asset) {
+        mostrarToast("Ativo existente não encontrado.", true);
+        return;
+    }
+
+    const locationSelect = document.getElementById("new-asset-location");
+    const stateSelect = document.getElementById("new-asset-state");
+    const assignedInput = document.getElementById("new-asset-assigned");
+    const maintenanceInput = document.getElementById("new-asset-maintenance");
+    const lastMaintenanceInput = document.getElementById("new-asset-last-maintenance");
+
+    if (locationSelect) locationSelect.value = String(getAssetLocationId(asset) || "");
+    if (stateSelect) stateSelect.value = getAssetStatus(asset);
+    if (assignedInput) assignedInput.value = getAssetAssigned(asset) === "-" ? "" : getAssetAssigned(asset);
+    if (maintenanceInput) maintenanceInput.value = getAssetMaintenancePeriod(asset);
+    if (lastMaintenanceInput) lastMaintenanceInput.value = formatDateForInput(getAssetLastMaintenance(asset));
+
+    const features = await carregarFeaturesCategoria(categoryId);
+    renderAssetSpecsFields(features);
+    preencherSpecsAtivo(asset);
+    mostrarToast("Campos preenchidos com dados existentes. Confirma o código interno antes de guardar.");
 }
 
 async function abrirModalAtivo(asset = null) {
@@ -3077,6 +3865,7 @@ async function abrirModalAtivo(asset = null) {
 
     definirModoModalAtivo(asset);
     renderAssetSpecsFields([]);
+    resetarSeletorAtivoExistente();
 
     if (asset) {
         const serialInput = document.getElementById("new-asset-serial");
@@ -3101,6 +3890,7 @@ async function abrirModalAtivo(asset = null) {
                 const features = await carregarFeaturesCategoria(categoryId);
                 renderAssetSpecsFields(features);
                 preencherSpecsAtivo(asset);
+                atualizarSeletorAtivoExistente();
             } catch (error) {
                 console.warn("[Dashboard] Não foi possível carregar as características do ativo:", error);
                 mostrarToast("Não foi possível carregar as características do ativo.", true);
@@ -3147,6 +3937,10 @@ function renderDetailField(label, value) {
 }
 
 function formatSpecValueForDetail(feature, rawValue) {
+    if (hasFeatureFieldSchema(feature)) {
+        return renderStructuredSpecValueForDetail(feature, rawValue);
+    }
+
     const values = decodeSpecValue(rawValue);
     const cleanValues = values.filter(value => value !== undefined && value !== null && String(value).trim() !== "");
 
@@ -3154,13 +3948,13 @@ function formatSpecValueForDetail(feature, rawValue) {
 
     if (cleanValues.length > 1) {
         return `
-                    <ul class="list-disc space-y-1 pl-5 text-sm text-gray-900">
-                        ${cleanValues.map(value => `<li>${escapeHTML(formatBooleanSpecValue(value))}</li>`).join("")}
-                    </ul>
-                `;
+            <div class="flex flex-wrap gap-2">
+                ${cleanValues.map(value => `<span class="rounded-lg bg-white px-2 py-1 text-sm font-semibold text-gray-900 ring-1 ring-gray-100">${escapeHTML(formatBooleanSpecValue(value))}</span>`).join("")}
+            </div>
+        `;
     }
 
-    return `<span class="text-sm font-semibold text-gray-900">${escapeHTML(formatBooleanSpecValue(cleanValues[0]))}</span>`;
+    return `<span class="inline-flex rounded-lg bg-white px-2 py-1 text-sm font-semibold text-gray-900 ring-1 ring-gray-100">${escapeHTML(formatBooleanSpecValue(cleanValues[0]))}</span>`;
 }
 
 function formatBooleanSpecValue(value) {
@@ -3192,6 +3986,8 @@ function renderAssetSpecsDetail(asset) {
                 feature_id: featureId,
                 feature_name: getFeatureName(detail),
                 feature_type: getFeatureType(detail),
+                field_schema: getFeatureFieldSchema(detail),
+                has_field_schema: hasFeatureFieldSchema(detail),
                 is_multiple: isFeatureRepeatable(detail),
                 is_repeatable: isFeatureRepeatable(detail),
                 feature_is_active: primeiroValor(detail, ["feature_is_active", "is_active", "active"], false),
@@ -3217,24 +4013,28 @@ function renderAssetSpecsDetail(asset) {
     }
 
     return `
-                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    ${features.map(feature => {
-        const featureId = String(getFeatureId(feature));
-        const rawValue = specsByFeatureId[featureId];
-        const values = decodeSpecValue(rawValue);
-        const hasMultipleValues = values.filter(value => value !== undefined && value !== null && String(value).trim() !== "").length > 1;
-        const repeatable = isFeatureRepeatable(feature);
-        return `
-                            <div class="rounded-xl border border-gray-100 bg-gray-50 p-3 ${(hasMultipleValues || repeatable) ? "md:col-span-2" : ""}">
-                                <div class="mb-1 flex flex-wrap items-center gap-2">
-                                    <p class="text-xs font-extrabold uppercase text-blue-900">${escapeHTML(getFeatureName(feature))}</p>
-                                </div>
-                                ${formatSpecValueForDetail(feature, rawValue)}
+        <div class="grid grid-cols-1 gap-3">
+            ${features.map(feature => {
+                const featureId = String(getFeatureId(feature));
+                const rawValue = specsByFeatureId[featureId];
+                const repeatable = isFeatureRepeatable(feature);
+                const structured = hasFeatureFieldSchema(feature);
+                return `
+                    <div class="rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
+                        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <p class="text-xs font-black uppercase tracking-wide text-blue-900">${escapeHTML(getFeatureName(feature))}</p>
+                                <p class="mt-0.5 text-[11px] font-semibold text-gray-500">${structured ?  "": (FEATURE_TYPE_LABELS[getFeatureType(feature)] || "Texto")}</p>
                             </div>
-                        `;
-    }).join("")}
-                </div>
-            `;
+                            <div class="flex flex-wrap gap-1">
+                            </div>
+                        </div>
+                        ${formatSpecValueForDetail(feature, rawValue)}
+                    </div>
+                `;
+            }).join("")}
+        </div>
+    `;
 }
 
 
@@ -3421,6 +4221,29 @@ function renderAuditChanges(log) {
             `;
 }
 
+function renderRollbackPanel(log) {
+    if (canRollbackLog(log)) {
+        return `
+                <section class="rounded-2xl border border-red-100 bg-red-50/70 p-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h3 class="text-sm font-black uppercase text-red-800">Reversão disponível</h3>
+                            <p class="mt-1 text-xs font-semibold text-red-700">${escapeHTML(getLogRollbackLabel(log))}. Esta operação cria um novo registo de auditoria e tenta repor os dados anteriores.</p>
+                        </div>
+                        <button type="button" class="rounded-lg border-2 border-red-700 bg-white px-4 py-2 text-sm font-black uppercase text-red-700 hover:bg-red-100" data-log-action="rollback" data-log-id="${escapeHTML(getLogId(log))}">Executar Reversão</button>
+                    </div>
+                </section>
+            `;
+    }
+
+    return `
+            <section class="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                <h3 class="text-sm font-black uppercase text-gray-600">Rollback indisponível</h3>
+                <p class="mt-1 text-xs font-semibold text-gray-500">${escapeHTML(getLogRollbackReason(log))}</p>
+            </section>
+        `;
+}
+
 function renderLogDetail(log) {
     const content = document.getElementById("logDetailContent");
     if (!content) return;
@@ -3429,13 +4252,16 @@ function renderLogDetail(log) {
     const newItems = getAuditItems(log, "new_value_display", "new_value");
 
     content.innerHTML = `
+                ${renderRollbackPanel(log)}
                 <section>
                     <h3 class="mb-3 text-sm font-black uppercase text-blue-900">Resumo</h3>
-                    <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
+                    <div class="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
                         ${renderDetailField("Data/hora", formatarData(getLogDate(log)))}
                         ${renderDetailField("Utilizador", getLogUser(log))}
                         ${renderDetailField("Ação", getLogActionLabel(log))}
                         ${renderDetailField("Área", getLogTableLabel(log))}
+                        ${renderDetailField("Registo afetado", getLogRecordLabel(log))}
+                        ${renderDetailField("Origem", getLogOriginLabel(log))}
                     </div>
                 </section>
                 <section>
@@ -3453,6 +4279,28 @@ function renderLogDetail(log) {
                     </div>
                 </section>
             `;
+}
+
+async function rollbackRegisto(logId) {
+    const log = cacheRegistos.find(item => String(getLogId(item)) === String(logId));
+
+    if (log && isUserCreationLog(log)) {
+        mostrarToast("Criação de utilizadores não pode ser revertida.", true);
+        return;
+    }
+
+    const label = log ? `${getLogRollbackLabel(log)} em ${getLogTableLabel(log)} #${primeiroValor(log, ["record_id"], "")}` : `Rollback do registo #${logId}`;
+
+    if (!confirm(`${label}. Tens a certeza?`)) return;
+
+    try {
+        await postJSON(`/logs/${logId}/rollback`, {});
+        mostrarToast("Rollback executado com sucesso.");
+        fecharModal("modalDetalheRegisto");
+        await carregarDados();
+    } catch (error) {
+        mostrarToast(error.message, true);
+    }
 }
 
 async function verDetalheRegisto(logId) {
@@ -3691,6 +4539,53 @@ function ligarAcoesSpecsRepetiveis() {
     document.body.dataset.repeatableSpecsListenerAttached = "true";
 }
 
+function ligarAcoesReutilizacaoSpecs() {
+    if (document.body.dataset.specReuseListenerAttached === "true") return;
+
+    document.body.addEventListener("change", event => {
+        const fieldSelect = event.target.closest("[data-spec-existing-field-select]");
+        if (fieldSelect) {
+            const row = fieldSelect.closest(".asset-spec-value-row");
+            if (!row || !fieldSelect.value) return;
+
+            const fieldKey = fieldSelect.dataset.fieldKey;
+            const input = Array.from(row.querySelectorAll("[data-schema-field-key]"))
+                .find(item => String(item.dataset.schemaFieldKey) === String(fieldKey));
+            if (!input) return;
+
+            input.value = fieldSelect.value;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            return;
+        }
+
+        const select = event.target.closest("[data-spec-existing-select]");
+        if (!select) return;
+
+        const row = select.closest(".asset-spec-value-row");
+        if (!row || !select.value) return;
+
+        if (row.matches("[data-structured-spec-row]")) {
+            const structuredValue = parseSpecStructuredValue(select.value);
+            row.querySelectorAll(".asset-structured-spec-input").forEach(input => {
+                const key = input.dataset.schemaFieldKey;
+                input.value = key && structuredValue[key] !== undefined && structuredValue[key] !== null
+                    ? String(structuredValue[key])
+                    : "";
+                input.dispatchEvent(new Event("input", { bubbles: true }));
+            });
+            return;
+        }
+
+        const input = row.querySelector(".asset-spec-value-input");
+        if (!input) return;
+
+        input.value = select.value;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    document.body.dataset.specReuseListenerAttached = "true";
+}
+
 function ligarAcoesGerais() {
     if (document.body.dataset.adminActionListenerAttached === "true") return;
 
@@ -3706,6 +4601,17 @@ function ligarAcoesGerais() {
         if (clearFilterButton) {
             event.preventDefault();
             limparFiltros(clearFilterButton.dataset.clearFilter);
+            return;
+        }
+
+        const logActionButton = event.target.closest("[data-log-action]");
+        if (logActionButton) {
+            event.preventDefault();
+            if (logActionButton.dataset.logAction === "rollback") {
+                rollbackRegisto(logActionButton.dataset.logId);
+            } else {
+                verDetalheRegisto(logActionButton.dataset.logId);
+            }
             return;
         }
 
@@ -3793,6 +4699,18 @@ function ligarAcoesRegistos() {
     if (!tbody || tbody.dataset.logActionsListenerAttached === "true") return;
 
     tbody.addEventListener("click", event => {
+        const button = event.target.closest("[data-log-action]");
+        if (button) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (button.dataset.logAction === "rollback") {
+                rollbackRegisto(button.dataset.logId);
+            } else {
+                verDetalheRegisto(button.dataset.logId);
+            }
+            return;
+        }
+
         const row = event.target.closest("[data-log-id]");
         if (!row) return;
 
@@ -3810,6 +4728,12 @@ function ligarModais() {
         categorySelect.dataset.listenerAttached = "true";
     }
 
+    const templateSelect = document.getElementById("asset-existing-template-select");
+    if (templateSelect && templateSelect.dataset.listenerAttached !== "true") {
+        templateSelect.addEventListener("change", () => aplicarAtivoExistenteSelecionado(templateSelect.value));
+        templateSelect.dataset.listenerAttached = "true";
+    }
+
     const assetStateSelect = document.getElementById("new-asset-state");
     if (assetStateSelect && assetStateSelect.dataset.listenerAttached !== "true") {
         assetStateSelect.addEventListener("change", () => {
@@ -3820,6 +4744,7 @@ function ligarModais() {
         });
         assetStateSelect.dataset.listenerAttached = "true";
     }
+
 
     const formAtivo = document.getElementById("formAtivo");
     if (formAtivo && formAtivo.dataset.listenerAttached !== "true") {
@@ -3840,12 +4765,15 @@ function ligarModais() {
             try {
                 if (editingAssetId) {
                     await putJSON(`/assets/${editingAssetId}`, payload);
-                } else {
-                    await postJSON("/assets/", payload);
+                    fecharModal("modalAtivo");
+                    mostrarToast("Ativo atualizado com sucesso.");
+                    await carregarDados();
+                    return;
                 }
 
+                await postJSON("/assets/", payload);
                 fecharModal("modalAtivo");
-                mostrarToast(editingAssetId ? "Ativo atualizado com sucesso." : "Ativo criado com sucesso.");
+                mostrarToast("Ativo criado com sucesso.");
                 await carregarDados();
             } catch (error) {
                 mostrarToast(error.message, true);
@@ -3894,6 +4822,7 @@ function exporFuncoesGlobais() {
         renderCategoriesTable,
         renderLogsTable,
         verDetalheRegisto,
+        rollbackRegisto,
         mudarPaginaTabela,
         limparFiltros,
         abrirModalUtilizador,
@@ -3944,6 +4873,7 @@ async function inicializarPagina() {
     ligarAcoesRegistos();
     ligarAcoesPaginacao();
     ligarAcoesSpecsRepetiveis();
+    ligarAcoesReutilizacaoSpecs();
     ligarAcoesGerais();
     ligarAcoesTransferenciaAdmin();
     await recarregarDados();

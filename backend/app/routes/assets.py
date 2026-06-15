@@ -35,6 +35,7 @@ def parse_spec_filters(args):
 
     feature_id = args.get("spec_feature_id") or args.get("feature_id")
     feature_name = args.get("spec_feature") or args.get("feature_name")
+    field_key = args.get("spec_field_key") or args.get("field_key")
     spec_value = args.get("spec_value") or args.get("value")
     operator = args.get("spec_operator") or args.get("operator") or "contains"
 
@@ -42,6 +43,7 @@ def parse_spec_filters(args):
         return [{
             "feature_id": feature_id,
             "feature_name": feature_name,
+            "field_key": field_key,
             "operator": operator,
             "value": spec_value,
         }]
@@ -90,6 +92,36 @@ def list_features_for_category_alias(category_id: int):
 def assets_summary():
     summary = inventory_service.get_assets_summary(manager_id=effective_manager_id())
     return success(data=summary)
+
+
+@assets_bp.route("/features/<int:feature_id>/values", methods=["GET"])
+@permission_required(Permission.ASSETS_READ)
+def feature_registered_values(feature_id: int):
+    limit = request.args.get("limit", default=80, type=int)
+    field_key = request.args.get("field_key") or request.args.get("schema_field_key")
+    ok, message, values = inventory_service.get_feature_registered_values(
+        feature_id=feature_id,
+        manager_id=effective_manager_id(),
+        limit=limit or 80,
+        field_key=field_key,
+    )
+    if not ok:
+        return error(message, status=404)
+    return success(data=values, message=message)
+
+
+@assets_bp.route("/categories/<int:category_id>/registered-assets", methods=["GET"])
+@permission_required(Permission.ASSETS_READ)
+def category_registered_assets(category_id: int):
+    limit = request.args.get("limit", default=80, type=int)
+    ok, message, assets = inventory_service.get_registered_assets_for_category(
+        category_id=category_id,
+        manager_id=effective_manager_id(),
+        limit=limit or 80,
+    )
+    if not ok:
+        return error(message, status=404)
+    return success(data=assets, message=message)
 
 
 @assets_bp.route("/", methods=["GET"])

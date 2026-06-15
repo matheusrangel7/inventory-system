@@ -4,15 +4,22 @@ from typing import Any
 
 from sqlalchemy import select
 
+from app.constants import ORIGIN_SCHEDULER_MANUTENCAO, ORIGIN_USER
 from app.extensions import db
 from app.models.audit_log import AuditLog
 from app.models.user import User
+from app.services import rollback_service
 
 
 ACTION_LABELS = {
     "INSERT": "Criação",
     "UPDATE": "Atualização",
     "DELETE": "Remoção",
+}
+
+ORIGIN_LABELS = {
+    ORIGIN_USER: "Utilizador",
+    ORIGIN_SCHEDULER_MANUTENCAO: "Sistema · manutenção automática",
 }
 
 TABLE_LABELS = {
@@ -49,6 +56,8 @@ FIELD_LABELS = {
     "location_manager_id": "ID do gestor",
     "location_name": "Local",
     "maintenance_period_months": "Período de manutenção",
+    "maintenance_due_date": "Data prevista de manutenção",
+    "maintenance_email_recipient": "Destinatário do aviso",
     "manager_email": "Email do gestor",
     "manager_id": "ID do gestor",
     "name": "Nome",
@@ -65,6 +74,7 @@ FIELD_LABELS = {
     "status": "Estado",
     "totp_secret_encrypted": "MFA configurado",
     "user_id": "ID do utilizador",
+    "value": "Valor",
 }
 
 FEATURE_TYPE_LABELS = {
@@ -78,20 +88,57 @@ NOISY_KEYS = {
     "specs_details",
 }
 
+ROLLBACKABLE_TABLES = {"assets", "categories", "features", "locations", "users"}
 
-def get_all_logs(limit: int = 200) -> list[dict]:
+
+def get_rollback_status(
+    log: AuditLog,
+    viewer_id: int | None = None,
+    viewer_role: str | None = None,
+) -> tuple[bool, str]:
+    return rollback_service.is_rollbackable(log, actor_id=viewer_id, actor_role=viewer_role)
+
+
+def _is_manager_view(viewer_role: str | None) -> bool:
+    return str(viewer_role or "").strip() == "Gestor"
+
+
+def _row_visible_to_viewer(log: AuditLog, viewer_id: int | None, viewer_role: str | None) -> bool:
+    if not _is_manager_view(viewer_role):
+        return True
+    return rollback_service.is_log_visible_to_manager(log, viewer_id)
+
+
+def get_all_logs(
+    limit: int = 200,
+    viewer_id: int | None = None,
+    viewer_role: str | None = None,
+) -> list[dict]:
     query = (
         select(AuditLog, User.email)
         .outerjoin(User, User.user_id == AuditLog.user_id)
         .order_by(AuditLog.created_at.desc())
-        .limit(limit)
     )
 
+    if _is_manager_view(viewer_role):
+        query = query.where(AuditLog.table_name == "assets").limit(max(limit * 10, 1000))
+    else:
+        query = query.limit(limit)
+
     rows = db.session.execute(query).all()
-    return [log_to_dict(log, email) for log, email in rows]
+    visible_rows = [
+        (log, email)
+        for log, email in rows
+        if _row_visible_to_viewer(log, viewer_id, viewer_role)
+    ][:limit]
+    return [log_to_dict(log, email, viewer_id=viewer_id, viewer_role=viewer_role) for log, email in visible_rows]
 
 
-def get_log_by_id(log_id: int) -> dict | None:
+def get_log_by_id(
+    log_id: int,
+    viewer_id: int | None = None,
+    viewer_role: str | None = None,
+) -> dict | None:
     row = db.session.execute(
         select(AuditLog, User.email)
         .outerjoin(User, User.user_id == AuditLog.user_id)
@@ -102,35 +149,102 @@ def get_log_by_id(log_id: int) -> dict | None:
         return None
 
     log, email = row
-    return log_to_dict(log, email)
+    if not _row_visible_to_viewer(log, viewer_id, viewer_role):
+        return None
+
+    return log_to_dict(log, email, viewer_id=viewer_id, viewer_role=viewer_role)
 
 
-def log_to_dict(log: AuditLog, email: str | None = None) -> dict:
-    old_display = build_display_items(log.old_value)
-    new_display = build_display_items(log.new_value)
+def log_to_dict(
+    log: AuditLog,
+    email: str | None = None,
+    viewer_id: int | None = None,
+    viewer_role: str | None = None,
+) -> dict:
+    old_value_for_display = value_for_display(log, log.old_value)
+    new_value_for_display = value_for_display(log, log.new_value)
+    old_display = build_display_items(old_value_for_display)
+    new_display = build_display_items(new_value_for_display)
+    can_rollback, rollback_reason = get_rollback_status(log, viewer_id=viewer_id, viewer_role=viewer_role)
 
     return {
         "log_id": log.log_id,
         "user_id": log.user_id,
         "user_email": email or "Sistema",
         "origin": log.origin,
+        "origin_label": get_origin_label(log.origin),
         "action": log.action,
         "action_label": get_action_label(log.action),
         "table_name": log.table_name,
         "table_label": get_table_label(log.table_name),
         "record_id": log.record_id,
+        "record_label": build_record_label(log),
         "old_value": log.old_value,
         "new_value": log.new_value,
         "old_value_display": old_display,
         "new_value_display": new_display,
-        "changes": build_changes(log.old_value, log.new_value),
+        "changes": build_changes(old_value_for_display, new_value_for_display),
         "details": build_details(log),
+        "can_rollback": can_rollback,
+        "rollback_reason": rollback_reason,
+        "rollback_label": build_rollback_label(log),
         "created_at": log.created_at.isoformat() if log.created_at else None,
     }
 
 
 def get_action_label(action: str | None) -> str:
     return ACTION_LABELS.get(str(action or "").upper(), action or "Ação")
+
+
+def get_origin_label(origin: str | None) -> str:
+    origin_value = str(origin or "").strip()
+    if origin_value.startswith("rollback:"):
+        return "Sistema · rollback"
+    return ORIGIN_LABELS.get(origin_value, origin_value or "Sistema")
+
+
+def first_snapshot_value(log: AuditLog, keys: tuple[str, ...]) -> Any:
+    for source in (log.new_value, log.old_value):
+        if not isinstance(source, dict):
+            continue
+        for key in keys:
+            value = source.get(key)
+            if value not in (None, "", "-"):
+                return value
+    return None
+
+
+def value_for_display(log: AuditLog, value: Any) -> Any:
+    if log.table_name != "assets":
+        return value
+
+    if isinstance(value, dict):
+        return {"asset_id": value.get("asset_id", log.record_id), **value}
+
+    if value in (None, ""):
+        return value
+
+    return {"asset_id": log.record_id, "value": value}
+
+
+def build_record_label(log: AuditLog) -> str:
+    table = get_table_label(log.table_name)
+
+    if log.table_name == "assets":
+        parts = [f"Ativo #{log.record_id}"]
+        serial_number = first_snapshot_value(log, ("serial_number", "codigo_interno", "code"))
+        location_name = first_snapshot_value(log, ("location_name", "local", "sala"))
+        category_name = first_snapshot_value(log, ("category_name", "categoria"))
+
+        if serial_number:
+            parts.append(str(serial_number))
+        if category_name:
+            parts.append(str(category_name))
+        if location_name:
+            parts.append(str(location_name))
+        return " · ".join(parts)
+
+    return f"{table} #{log.record_id}"
 
 
 def get_table_label(table_name: str | None) -> str:
@@ -205,6 +319,10 @@ def build_display_items(value: Any) -> list[dict]:
     for key, item in value.items():
         if key in NOISY_KEYS:
             continue
+        if key == "status" and "asset_state" in value:
+            continue
+        if key == "created_at" and "registered_at" in value:
+            continue
 
         if key == "specs" and isinstance(item, dict):
             for spec_name, spec_value in item.items():
@@ -250,7 +368,25 @@ def build_changes(old_value: Any, new_value: Any) -> list[dict]:
     return changes
 
 
+def build_rollback_label(log: AuditLog) -> str:
+    action = str(log.action or "").upper()
+    if action == "INSERT":
+        return "Reverter criação"
+    if action == "DELETE":
+        return "Restaurar remoção"
+    if action == "UPDATE":
+        return "Repor valor anterior"
+    return "Rollback"
+
+
 def build_details(log: AuditLog) -> str:
     action = get_action_label(log.action)
-    table = get_table_label(log.table_name)
-    return f"{action} em {table} #{log.record_id}"
+    record = build_record_label(log)
+    origin = get_origin_label(log.origin)
+    if str(log.origin or "") == ORIGIN_SCHEDULER_MANUTENCAO:
+        return f"{action} automática de manutenção em {record}"
+    if str(log.origin or "").startswith("rollback:"):
+        return f"{action} por rollback em {record}"
+    if origin and origin not in {"Utilizador", "Sistema"}:
+        return f"{action} em {record} · {origin}"
+    return f"{action} em {record}"

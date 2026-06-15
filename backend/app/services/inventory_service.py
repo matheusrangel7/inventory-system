@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+import json
 from math import ceil
+import re
 from typing import Any
+import unicodedata
 
-from sqlalchemy import Float, String, and_, case, cast, func, or_, select
+from sqlalchemy import Float, String, and_, cast, func, or_, select
 
 from app.extensions import db
 from app.models.inventory import Asset, AssetSpec, Category, Feature
@@ -13,10 +16,11 @@ from app.utils.audit import log_action
 
 VALID_ASSET_STATES = {"Bom Estado", "Necessita Manutenção", "Avariado", "Para Abate"}
 VALID_FEATURE_TYPES = {"text", "number", "boolean", "date"}
+VALID_SCHEMA_FIELD_TYPES = {"text", "number", "boolean", "date", "select"}
 
 
 def _clean_text(value: Any) -> str:
-    return str(value or "").strip()
+    return " ".join(str(value or "").strip().split())
 
 
 def _norm(value: Any) -> str:
@@ -55,6 +59,222 @@ def _normalizar_bool(value: Any, default: bool = False) -> bool:
     return str(value).strip().lower() in {"1", "true", "sim", "yes", "on", "multiple", "multiplo", "múltiplo"}
 
 
+def _strip_accents(value: Any) -> str:
+    return "".join(
+        char for char in unicodedata.normalize("NFD", str(value or ""))
+        if unicodedata.category(char) != "Mn"
+    )
+
+
+def _schema_field_key(value: Any, fallback: str = "campo") -> str:
+    base = _strip_accents(value).lower().strip()
+    base = re.sub(r"[^a-z0-9]+", "_", base).strip("_")
+    return base or fallback
+
+
+def _normalize_schema_options(raw_options: Any) -> list[str]:
+    if raw_options in (None, ""):
+        return []
+    if isinstance(raw_options, str):
+        pieces = raw_options.split("\n") if "\n" in raw_options else raw_options.split(",")
+    elif isinstance(raw_options, list):
+        pieces = raw_options
+    else:
+        pieces = [raw_options]
+
+    result: list[str] = []
+    seen: set[str] = set()
+    for option in pieces:
+        clean = _clean_text(option)
+        if not clean:
+            continue
+        key = _schema_field_key(clean)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(clean)
+    return result
+
+
+def _normalize_field_schema(raw_schema: Any, feature_name: str = "Característica") -> tuple[list[dict], str | None]:
+    if raw_schema in (None, ""):
+        return [], None
+    if isinstance(raw_schema, str):
+        try:
+            raw_schema = json.loads(raw_schema)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return [], f"A estrutura de campos da característica '{feature_name}' é inválida."
+
+    if not isinstance(raw_schema, list):
+        return [], f"A estrutura de campos da característica '{feature_name}' deve ser uma lista."
+
+    normalized: list[dict] = []
+    used_keys: set[str] = set()
+    for index, raw_field in enumerate(raw_schema, start=1):
+        if not isinstance(raw_field, dict):
+            return [], f"Cada campo interno da característica '{feature_name}' deve ser um objeto."
+
+        label = _clean_text(
+            raw_field.get("label")
+            or raw_field.get("field_label")
+            or raw_field.get("name")
+            or raw_field.get("nome")
+            or raw_field.get("key")
+        )
+        if not label:
+            return [], f"O campo interno nº {index} da característica '{feature_name}' precisa de nome."
+
+        field_type = _clean_text(
+            raw_field.get("type")
+            or raw_field.get("field_type")
+            or raw_field.get("tipo")
+            or "text"
+        ).lower()
+        if field_type not in VALID_SCHEMA_FIELD_TYPES:
+            return [], f"Tipo inválido no campo interno '{label}' da característica '{feature_name}'."
+
+        key = _schema_field_key(raw_field.get("key") or raw_field.get("field_key") or label, f"campo_{index}")
+        if key in used_keys:
+            return [], f"A característica '{feature_name}' tem campos internos repetidos: '{label}'."
+        used_keys.add(key)
+
+        options = _normalize_schema_options(raw_field.get("options") or raw_field.get("opcoes") or raw_field.get("choices"))
+        if field_type == "select" and not options:
+            return [], f"O campo interno '{label}' da característica '{feature_name}' precisa de opções."
+
+        normalized.append({
+            "key": key,
+            "label": label,
+            "type": field_type,
+            "required": _normalizar_bool(raw_field.get("required") if "required" in raw_field else raw_field.get("obrigatorio"), False),
+            "unit": _clean_text(raw_field.get("unit") or raw_field.get("unidade") or ""),
+            "options": options,
+            "placeholder": _clean_text(raw_field.get("placeholder") or ""),
+        })
+
+    return normalized, None
+
+
+def _feature_field_schema(feature: Feature | dict | None) -> list[dict]:
+    if not feature:
+        return []
+    raw_schema = feature.get("field_schema") if isinstance(feature, dict) else getattr(feature, "field_schema", None)
+    schema, _ = _normalize_field_schema(raw_schema, feature.get("feature_name", "Característica") if isinstance(feature, dict) else getattr(feature, "feature_name", "Característica"))
+    return schema
+
+
+def _is_structured_feature(feature: Feature | dict | None) -> bool:
+    return bool(_feature_field_schema(feature))
+
+
+def _normalize_schema_field_value(field: dict, raw_value: Any, feature_name: str) -> tuple[Any | None, str | None]:
+    label = field.get("label") or field.get("key") or "Campo"
+    required = bool(field.get("required"))
+    if raw_value is None or (isinstance(raw_value, str) and raw_value.strip() == ""):
+        if required:
+            return None, f"O campo '{feature_name} > {label}' é obrigatório."
+        return None, None
+
+    field_type = str(field.get("type") or "text").lower()
+
+    if field_type == "number":
+        normalized = str(raw_value).strip().replace(",", ".")
+        try:
+            number = float(normalized)
+        except ValueError:
+            return None, f"O campo '{feature_name} > {label}' deve ser numérico."
+        return int(number) if number.is_integer() else number, None
+
+    if field_type == "boolean":
+        normalized = str(raw_value).strip().lower()
+        if normalized in {"true", "1", "sim", "yes", "on"}:
+            return True, None
+        if normalized in {"false", "0", "nao", "não", "no", "off"}:
+            return False, None
+        return None, f"O campo '{feature_name} > {label}' deve ser sim/não."
+
+    if field_type == "date":
+        parsed = _parse_date(raw_value)
+        if not parsed:
+            return None, f"O campo '{feature_name} > {label}' deve ter uma data válida."
+        return parsed.isoformat(), None
+
+    if field_type == "select":
+        clean_value = _clean_text(raw_value)
+        options = field.get("options") or []
+        option_map = {_schema_field_key(option): option for option in options}
+        selected = option_map.get(_schema_field_key(clean_value))
+        if selected is None:
+            return None, f"O campo '{feature_name} > {label}' deve usar uma das opções definidas pelo administrador."
+        return selected, None
+
+    return _clean_text(raw_value), None
+
+
+def _normalize_structured_feature_item(feature: Feature, raw_item: Any) -> tuple[dict | None, str | None]:
+    schema = _feature_field_schema(feature)
+    if not schema:
+        return None, None
+
+    if isinstance(raw_item, str):
+        stripped = raw_item.strip()
+        if not stripped:
+            raw_item = {}
+        else:
+            try:
+                raw_item = json.loads(stripped)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                return None, f"O campo '{feature.feature_name}' deve ser preenchido pela estrutura definida pelo administrador."
+
+    if not isinstance(raw_item, dict):
+        return None, f"O campo '{feature.feature_name}' deve ser preenchido pela estrutura definida pelo administrador."
+
+    by_normalized_key = {_schema_field_key(key): value for key, value in raw_item.items()}
+    normalized_item: dict[str, Any] = {}
+
+    for field in schema:
+        field_key = field["key"]
+        lookup_keys = [field_key, _schema_field_key(field.get("label"))]
+        raw_value = None
+        for lookup_key in lookup_keys:
+            if lookup_key in raw_item:
+                raw_value = raw_item.get(lookup_key)
+                break
+            if lookup_key in by_normalized_key:
+                raw_value = by_normalized_key.get(lookup_key)
+                break
+
+        value, validation_error = _normalize_schema_field_value(field, raw_value, feature.feature_name)
+        if validation_error:
+            return None, validation_error
+        if value is not None:
+            normalized_item[field_key] = value
+
+    if not normalized_item:
+        return None, None
+    return normalized_item, None
+
+
+def _format_structured_value(value: dict, schema: list[dict]) -> str:
+    if not isinstance(value, dict):
+        return _feature_option_label(value)
+
+    parts: list[str] = []
+    for field in schema:
+        key = field.get("key")
+        if key not in value:
+            continue
+        raw = value.get(key)
+        if raw is None or str(raw).strip() == "":
+            continue
+        display = "Sim" if raw is True else "Não" if raw is False else str(raw)
+        unit = _clean_text(field.get("unit") or "")
+        if unit and display not in {"Sim", "Não"}:
+            display = f"{display} {unit}"
+        parts.append(f"{field.get('label') or key}: {display}")
+    return "; ".join(parts) or json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
 def _flatten_json_value(value: Any) -> list[str]:
     if value is None:
         return []
@@ -71,12 +291,29 @@ def _flatten_json_value(value: Any) -> list[str]:
     return [str(value)]
 
 
+def _feature_option_value(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return _clean_text(value)
+
+
+def _feature_option_label(value: Any) -> str:
+    if isinstance(value, bool):
+        return "Sim" if value else "Não"
+    return _feature_option_value(value)
+
+
 def _iso(value):
     return value.isoformat() if value else None
 
 
 def feature_to_dict(feature: Feature) -> dict:
     is_multiple = bool(getattr(feature, "is_multiple", False))
+    field_schema = _feature_field_schema(feature)
     return {
         "feature_id": feature.feature_id,
         "feature_name": feature.feature_name,
@@ -84,6 +321,8 @@ def feature_to_dict(feature: Feature) -> dict:
         "category_id": feature.category_id,
         "is_multiple": is_multiple,
         "is_repeatable": is_multiple,
+        "field_schema": field_schema,
+        "has_field_schema": bool(field_schema),
         "is_active": feature.is_active,
     }
 
@@ -158,24 +397,52 @@ def _normalize_single_feature_value(feature: Feature, raw_value: Any) -> tuple[A
             return None, f"O campo '{feature.feature_name}' deve ter uma data válida."
         return parsed.isoformat(), None
 
-    return value, None
+    return _clean_text(value), None
 
 
 def _normalize_feature_value(feature: Feature, raw_value: Any) -> tuple[Any | None, str | None]:
     """Normaliza specs para JSONB.
 
-    Features normais guardam um valor JSON escalar. Features com is_multiple=true
-    guardam sempre uma lista JSON, permitindo vários CPUs, sticks de RAM, discos, etc.
+    - Sem field_schema: mantém o comportamento antigo, com valor escalar ou lista.
+    - Com field_schema: guarda objetos JSON com os campos definidos pelo administrador.
     """
     is_multiple = bool(getattr(feature, "is_multiple", False))
+    is_structured = _is_structured_feature(feature)
+
+    if is_structured:
+        raw_items = raw_value if isinstance(raw_value, list) else [raw_value]
+        normalized_values: list[Any] = []
+        seen_values: set[str] = set()
+
+        for item in raw_items:
+            value, validation_error = _normalize_structured_feature_item(feature, item)
+            if validation_error:
+                return None, validation_error
+            if value is not None:
+                dedupe_key = json.dumps(value, ensure_ascii=False, sort_keys=True).casefold()
+                if dedupe_key in seen_values:
+                    continue
+                seen_values.add(dedupe_key)
+                normalized_values.append(value)
+
+        if not normalized_values:
+            return None, None
+        if not is_multiple and len(normalized_values) > 1:
+            return None, f"O campo '{feature.feature_name}' não permite múltiplos valores."
+        return normalized_values if is_multiple else normalized_values[0], None
 
     if isinstance(raw_value, list):
         normalized_values: list[Any] = []
+        seen_values: set[str] = set()
         for item in raw_value:
             value, validation_error = _normalize_single_feature_value(feature, item)
             if validation_error:
                 return None, validation_error
             if value is not None:
+                dedupe_key = json.dumps(value, ensure_ascii=False, sort_keys=True).casefold()
+                if dedupe_key in seen_values:
+                    continue
+                seen_values.add(dedupe_key)
                 normalized_values.append(value)
 
         if not normalized_values:
@@ -210,6 +477,9 @@ def _feature_is_multiple_from_payload(raw_feature: dict) -> bool:
 def _validate_features_payload(features: list[dict]) -> tuple[bool, str]:
     names: set[str] = set()
     for raw_feature in features:
+        if not isinstance(raw_feature, dict):
+            return False, "Cada característica deve ser um objeto."
+
         name = _clean_text(
             raw_feature.get("feature_name")
             or raw_feature.get("name")
@@ -229,6 +499,16 @@ def _validate_features_payload(features: list[dict]) -> tuple[bool, str]:
         if name.casefold() in names:
             return False, f"A característica '{name}' está repetida."
         names.add(name.casefold())
+
+        _, schema_error = _normalize_field_schema(
+            raw_feature.get("field_schema")
+            or raw_feature.get("schema")
+            or raw_feature.get("fields")
+            or raw_feature.get("campos"),
+            name,
+        )
+        if schema_error:
+            return False, schema_error
 
     return True, "Características válidas."
 
@@ -364,6 +644,7 @@ def create_feature(
     category_id: int,
     admin_id: int | None = None,
     is_multiple: bool = False,
+    field_schema: list[dict] | None = None,
 ) -> tuple[bool, str, Feature | None]:
     category = get_category_by_id(category_id)
     if not category:
@@ -376,6 +657,10 @@ def create_feature(
     if feature_type not in VALID_FEATURE_TYPES:
         return False, "Tipo de característica inválida.", None
 
+    normalized_schema, schema_error = _normalize_field_schema(field_schema, clean_name)
+    if schema_error:
+        return False, schema_error, None
+
     existing = db.session.execute(
         select(Feature).where(Feature.category_id == category_id, Feature.feature_name == clean_name)
     ).scalar_one_or_none()
@@ -387,9 +672,10 @@ def create_feature(
         existing.is_active = True
         existing.feature_type = feature_type
         existing.is_multiple = bool(is_multiple)
+        existing.field_schema = normalized_schema
         feature = existing
     else:
-        feature = Feature(feature_name=clean_name, feature_type=feature_type, category_id=category_id, is_multiple=bool(is_multiple))
+        feature = Feature(feature_name=clean_name, feature_type=feature_type, category_id=category_id, is_multiple=bool(is_multiple), field_schema=normalized_schema)
         db.session.add(feature)
         db.session.flush()
 
@@ -417,6 +703,16 @@ def _sync_category_features(category_id: int, features: list[dict], admin_id: in
         name = _clean_text(raw_feature.get("feature_name") or raw_feature.get("name") or raw_feature.get("nome"))
         feature_type = _clean_text(raw_feature.get("feature_type") or raw_feature.get("type") or raw_feature.get("tipo") or "text").lower()
         is_multiple = _feature_is_multiple_from_payload(raw_feature)
+        field_schema, schema_error = _normalize_field_schema(
+            raw_feature.get("field_schema")
+            or raw_feature.get("schema")
+            or raw_feature.get("fields")
+            or raw_feature.get("campos"),
+            name,
+        )
+        if schema_error:
+            return False, schema_error
+
         raw_id = raw_feature.get("feature_id") or raw_feature.get("id") or raw_feature.get("id_feature")
 
         feature = by_id.get(str(raw_id)) if raw_id else by_name.get(name.casefold())
@@ -429,6 +725,7 @@ def _sync_category_features(category_id: int, features: list[dict], admin_id: in
                 feature_name=name,
                 feature_type=feature_type,
                 is_multiple=is_multiple,
+                field_schema=field_schema,
                 is_active=True,
             )
             db.session.add(feature)
@@ -447,6 +744,7 @@ def _sync_category_features(category_id: int, features: list[dict], admin_id: in
             feature.feature_name = name
             feature.feature_type = feature_type
             feature.is_multiple = is_multiple
+            feature.field_schema = field_schema
             feature.is_active = True
             if old_value != feature_to_dict(feature):
                 log_action(
@@ -499,6 +797,8 @@ def _get_specs_for_asset(asset_id: int) -> tuple[dict, list[dict]]:
             "feature_id": feature.feature_id,
             "feature_name": feature.feature_name,
             "feature_type": feature.feature_type,
+            "field_schema": _feature_field_schema(feature),
+            "has_field_schema": _is_structured_feature(feature),
             "is_multiple": is_multiple,
             "is_repeatable": is_multiple,
             "feature_is_active": feature_is_active,
@@ -542,6 +842,8 @@ def _get_specs_for_assets(asset_ids: list[int]) -> dict[int, tuple[dict[str, Any
             "feature_id": feature.feature_id,
             "feature_name": feature.feature_name,
             "feature_type": feature.feature_type,
+            "field_schema": _feature_field_schema(feature),
+            "has_field_schema": _is_structured_feature(feature),
             "is_multiple": is_multiple,
             "is_repeatable": is_multiple,
             "feature_is_active": feature_is_active,
@@ -613,15 +915,32 @@ def _asset_matches_search(asset: dict, search: str | None) -> bool:
     return all(word in haystack for word in term.split())
 
 
+def _extract_field_values_from_spec_content(content: Any, field_key: str | None = None) -> list[str]:
+    if not field_key:
+        return _flatten_json_value(content)
+
+    normalized_field_key = _schema_field_key(field_key)
+    values: list[str] = []
+    items = content if isinstance(content, list) else [content]
+    for item in items:
+        if isinstance(item, dict):
+            for key, value in item.items():
+                if _schema_field_key(key) == normalized_field_key:
+                    values.extend(_flatten_json_value(value))
+                    break
+    return values
+
+
 def _spec_values_for_filter(asset: dict, raw_filter: dict) -> list[str]:
     feature_id = _clean_text(raw_filter.get("feature_id") or raw_filter.get("id"))
     feature_name = _norm(raw_filter.get("feature_name") or raw_filter.get("name"))
+    field_key = _clean_text(raw_filter.get("field_key") or raw_filter.get("schema_field_key"))
     values: list[str] = []
     for detail in asset.get("specs_details", []):
         same_id = feature_id and str(detail.get("feature_id")) == feature_id
         same_name = feature_name and feature_name in _norm(detail.get("feature_name"))
         if same_id or same_name:
-            values.extend(_flatten_json_value(detail.get("content", detail.get("spec_value"))))
+            values.extend(_extract_field_values_from_spec_content(detail.get("content", detail.get("spec_value")), field_key))
     return values
 
 
@@ -654,6 +973,15 @@ def _matches_operator(values: list[str], operator: str, expected: Any) -> bool:
         if operator in {"lt", "less_than"}:
             return any(number < expected_number for number in numbers)
         return any(number <= expected_number for number in numbers)
+    if operator in {"before", "after"}:
+        expected_date = _parse_date(expected_text)
+        if not expected_date:
+            return False
+        parsed_values = [_parse_date(value) for value in values if _clean_text(value)]
+        parsed_values = [value for value in parsed_values if value]
+        if operator == "before":
+            return any(value < expected_date for value in parsed_values)
+        return any(value > expected_date for value in parsed_values)
     return any(expected_norm in value for value in values_norm)
 
 
@@ -742,6 +1070,7 @@ def _json_text_expression():
 def _apply_spec_filter(query, raw_filter: dict):
     feature_id = _to_int(raw_filter.get("feature_id") or raw_filter.get("id"))
     feature_name = _clean_text(raw_filter.get("feature_name") or raw_filter.get("name"))
+    field_key = _clean_text(raw_filter.get("field_key") or raw_filter.get("schema_field_key"))
     operator = _norm(raw_filter.get("operator") or "contains")
     expected = _clean_text(raw_filter.get("value"))
 
@@ -755,37 +1084,35 @@ def _apply_spec_filter(query, raw_filter: dict):
         conditions.append(Feature.feature_name.ilike(f"%{feature_name}%"))
 
     content_text = _json_text_expression()
-    comparable_content = func.lower(func.replace(content_text, '"', ''))
+    if field_key:
+        field_text = AssetSpec.content[_schema_field_key(field_key)].astext
+        comparable_content = func.lower(func.coalesce(field_text, ""))
+        text_for_contains = func.coalesce(field_text, "")
+        numeric_source = field_text
+    else:
+        comparable_content = func.lower(func.replace(content_text, '"', ''))
+        text_for_contains = content_text
+        numeric_source = AssetSpec.content.astext
+
     expected_norm = expected.lower()
 
     if operator in {"exists", "has_value"}:
-        value_condition = AssetSpec.content.is_not(None)
+        value_condition = (text_for_contains != "") if field_key else AssetSpec.content.is_not(None)
     elif not expected:
-        value_condition = AssetSpec.content.is_not(None)
+        value_condition = (text_for_contains != "") if field_key else AssetSpec.content.is_not(None)
     elif operator in {"equals", "eq", "igual"}:
         value_condition = comparable_content == expected_norm
     elif operator in {"not_equals", "ne", "diferente"}:
         value_condition = comparable_content != expected_norm
     elif operator in {"not_contains", "nao_contem"}:
-        value_condition = ~content_text.ilike(f"%{expected}%")
+        value_condition = ~text_for_contains.ilike(f"%{expected}%")
     elif operator in {"gt", "gte", "lt", "lte", "greater_than", "greater_or_equal", "less_than", "less_or_equal"}:
         try:
             expected_number = float(expected.replace(",", "."))
         except ValueError:
             value_condition = False
         else:
-            conditions.append(Feature.feature_type == "number")
-            conditions.append(func.jsonb_typeof(AssetSpec.content) == "number")
-            numeric_content = cast(
-                case(
-                    (
-                        func.jsonb_typeof(AssetSpec.content) == "number",
-                        cast(AssetSpec.content, String),
-                    ),
-                    else_=None,
-                ),
-                Float,
-            )
+            numeric_content = cast(numeric_source, Float)
             if operator in {"gt", "greater_than"}:
                 value_condition = numeric_content > expected_number
             elif operator in {"gte", "greater_or_equal"}:
@@ -794,8 +1121,13 @@ def _apply_spec_filter(query, raw_filter: dict):
                 value_condition = numeric_content < expected_number
             else:
                 value_condition = numeric_content <= expected_number
+    elif operator in {"before", "after"}:
+        if operator == "before":
+            value_condition = text_for_contains < expected
+        else:
+            value_condition = text_for_contains > expected
     else:
-        value_condition = content_text.ilike(f"%{expected}%")
+        value_condition = text_for_contains.ilike(f"%{expected}%")
 
     conditions.append(value_condition)
     return query.where(
@@ -980,6 +1312,124 @@ def _normalize_specs(category_id: int, specs: dict | None) -> tuple[bool, dict[i
         if value is not None:
             normalized[feature.feature_id] = value
     return True, normalized, None
+
+
+def get_feature_registered_values(
+    feature_id: int,
+    manager_id: int | None = None,
+    limit: int = 80,
+    field_key: str | None = None,
+) -> tuple[bool, str, list[dict]]:
+    feature = db.session.get(Feature, feature_id)
+    if not feature or not feature.is_active:
+        return False, "Característica não encontrada.", []
+
+    schema = _feature_field_schema(feature)
+    normalized_field_key = _schema_field_key(field_key) if field_key else ""
+    schema_field = None
+    if normalized_field_key:
+        schema_field = next(
+            (field for field in schema if _schema_field_key(field.get("key") or field.get("label")) == normalized_field_key),
+            None,
+        )
+        if schema and not schema_field:
+            return False, "Campo interno da característica não encontrado.", []
+
+    query = (
+        select(AssetSpec.content)
+        .join(Asset, Asset.asset_id == AssetSpec.asset_id)
+        .join(Location, Location.location_id == Asset.location_id)
+        .where(
+            AssetSpec.feature_id == feature_id,
+            AssetSpec.is_active == True,
+            Asset.is_active == True,
+            Location.is_active == True,
+        )
+    )
+    if manager_id is not None:
+        query = query.where(Location.location_manager_id == manager_id)
+
+    query = query.order_by(AssetSpec.spec_id.desc()).limit(1000)
+    rows = db.session.execute(query).scalars().all()
+    values: list[dict] = []
+    seen: set[str] = set()
+
+    for content in rows:
+        for item in (content if isinstance(content, list) else [content]):
+            if normalized_field_key:
+                if not isinstance(item, dict):
+                    continue
+
+                field_values: list[Any] = []
+                for raw_key, raw_value in item.items():
+                    if _schema_field_key(raw_key) == normalized_field_key:
+                        field_values = _flatten_json_value(raw_value)
+                        break
+
+                for field_value in field_values:
+                    option_value = _feature_option_value(field_value)
+                    if not option_value:
+                        continue
+                    key = option_value.casefold()
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    values.append({
+                        "value": option_value,
+                        "label": _feature_option_label(field_value),
+                        "feature_id": feature.feature_id,
+                        "feature_name": feature.feature_name,
+                        "feature_type": feature.feature_type,
+                        "field_key": normalized_field_key,
+                        "field_label": (schema_field or {}).get("label") or normalized_field_key,
+                        "field_schema": schema,
+                        "has_field_schema": bool(schema),
+                    })
+                    if len(values) >= limit:
+                        return True, "Valores do campo carregados com sucesso.", values
+                continue
+
+            option_value = _feature_option_value(item)
+            if not option_value:
+                continue
+            key = option_value.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            values.append({
+                "value": option_value,
+                "label": _format_structured_value(item, schema) if schema and isinstance(item, dict) else _feature_option_label(item),
+                "feature_id": feature.feature_id,
+                "feature_name": feature.feature_name,
+                "feature_type": feature.feature_type,
+                "field_schema": schema,
+                "has_field_schema": bool(schema),
+            })
+            if len(values) >= limit:
+                return True, "Valores carregados com sucesso.", values
+
+    return True, "Valores carregados com sucesso.", values
+
+
+def get_registered_assets_for_category(
+    category_id: int,
+    manager_id: int | None = None,
+    limit: int = 80,
+) -> tuple[bool, str, list[dict]]:
+    category = get_category_by_id(category_id)
+    if not category:
+        return False, "Categoria não encontrada.", []
+
+    safe_limit = max(1, min(int(limit or 80), 200))
+    result = get_assets_by_filters(
+        category_id=category_id,
+        manager_id=manager_id,
+        sort="date-desc",
+        page=1,
+        page_size=safe_limit,
+    )
+    items = result.get("items", []) if isinstance(result, dict) else result
+    return True, "Ativos registados carregados com sucesso.", items
 
 
 def create_asset(

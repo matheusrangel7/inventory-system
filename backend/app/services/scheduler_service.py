@@ -10,6 +10,7 @@ from app.models.inventory import Asset
 from app.models.location import Location
 from app.models.user import User
 from app.services.email_service import send_maintenance_alert_email
+from app.services.inventory_service import asset_to_dict
 from app.utils.audit import log_action
 from app.constants import ORIGIN_SCHEDULER_MANUTENCAO
 
@@ -64,8 +65,16 @@ def check_maintenance() -> int:
             )
             continue
 
-        old_state = asset.asset_state
+        old_value = asset_to_dict(asset)
+        old_value["maintenance_due_date"] = due_date.isoformat()
+        old_value["maintenance_email_recipient"] = recipient
+
         asset.asset_state = "Necessita Manutenção"
+        db.session.flush()
+
+        new_value = asset_to_dict(asset)
+        new_value["maintenance_due_date"] = due_date.isoformat()
+        new_value["maintenance_email_recipient"] = recipient
 
         log_action(
             action="UPDATE",
@@ -73,8 +82,8 @@ def check_maintenance() -> int:
             record_id=asset.asset_id,
             user_id=None,
             origin=ORIGIN_SCHEDULER_MANUTENCAO,
-            old_value={"asset_state": old_state},
-            new_value={"asset_state": "Necessita Manutenção"},
+            old_value=old_value,
+            new_value=new_value,
         )
         db.session.commit()
         updated_count += 1

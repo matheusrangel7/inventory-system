@@ -42,6 +42,7 @@ GESTOR_PERMISSIONS = frozenset(
         Permission.ASSETS_REMOVE,
         Permission.LOCATIONS_READ,
         Permission.CATEGORIES_READ,
+        Permission.LOGS_READ,
     }
 )
 
