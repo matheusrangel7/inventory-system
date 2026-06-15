@@ -22,6 +22,7 @@ def test_gestor_has_only_operational_permissions():
         Permission.ASSETS_REMOVE,
         Permission.LOCATIONS_READ,
         Permission.CATEGORIES_READ,
+        Permission.LOGS_READ,
     }
 
 
@@ -118,11 +119,11 @@ def test_database_role_wins_over_forged_jwt_role(monkeypatch):
         ),
     )
 
-    @decorators.permission_required(Permission.LOGS_READ)
+    @decorators.permission_required(Permission.USERS_READ)
     def protected():
         return "ok"
 
-    with app.test_request_context("/api/logs/"):
+    with app.test_request_context("/api/users/"):
         response, status = protected()
 
     assert status == 403

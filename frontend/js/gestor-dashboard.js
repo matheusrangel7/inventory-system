@@ -5,6 +5,7 @@
         { id: "ativos", title: "ATIVOS" },
         { id: "categorias", title: "CATEGORIAS" },
         { id: "locais", title: "LOCAIS" },
+        { id: "registos", title: "REGISTOS" },
     ];
 
     const TABLE_PAGE_SIZE = 10;
@@ -51,6 +52,7 @@
     let cacheAtivos = [];
     let cacheLocais = [];
     let cacheCategorias = [];
+    let cacheRegistos = [];
     let cacheFeaturesPorCategoria = {};
     let cacheValoresSpecsPorFeature = {};
     let cacheAtivosRegistadosPorCategoria = {};
@@ -67,6 +69,7 @@
         categories: 1,
         locations: 1,
         actionAssets: 1,
+        logs: 1,
     };
 
     function showView(viewName) {
@@ -108,6 +111,8 @@
             abrirModalAtivoGestor,
             abrirDetalheAtivoGestor,
             fecharModalGestor,
+            rollbackRegisto,
+            verDetalheRegisto,
         });
     }
 
@@ -125,6 +130,8 @@
         document.querySelector("[data-categories-filters-toggle]")?.addEventListener("click", toggleCategoriesFilterDrawer);
         document.getElementById("btnLimparFiltrosLocais")?.addEventListener("click", limparFiltrosLocais);
         document.getElementById("btnLimparFiltrosCategorias")?.addEventListener("click", limparFiltrosCategorias);
+        document.getElementById("btnLimparFiltrosRegistos")?.addEventListener("click", limparFiltrosRegistos);
+        document.querySelector("[data-logs-filters-toggle]")?.addEventListener("click", toggleLogsFilterDrawer);
         document.getElementById("asset-category")?.addEventListener("change", () => atualizarCamposSpecsDoAtivo());
         document.getElementById("asset-existing-template-select")?.addEventListener("change", (event) => aplicarAtivoExistenteSelecionado(event.target.value));
         document.getElementById("asset-state")?.addEventListener("change", preencherManutencaoSeBomEstado);
@@ -174,6 +181,17 @@
             });
         });
 
+        ["logs-search", "logs-user", "logs-action", "logs-sort"].forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const eventName = el.tagName === "SELECT" ? "change" : "input";
+            el.addEventListener(eventName, () => {
+                tablePaginationState.logs = 1;
+                renderLogsTable();
+                updateLogsSearchSummary();
+            });
+        });
+
         document.body.addEventListener("click", async (event) => {
             const closeButton = event.target.closest("[data-close-modal]");
             if (closeButton) {
@@ -205,6 +223,26 @@
                 return;
             }
 
+            const logActionButton = event.target.closest("[data-log-action]");
+            if (logActionButton) {
+                event.preventDefault();
+                event.stopPropagation();
+                const logId = logActionButton.dataset.logId;
+                if (logActionButton.dataset.logAction === "rollback") {
+                    await rollbackRegisto(logId);
+                } else {
+                    await verDetalheRegisto(logId);
+                }
+                return;
+            }
+
+            const logRow = event.target.closest("[data-open-log]");
+            if (logRow) {
+                event.preventDefault();
+                await verDetalheRegisto(logRow.dataset.openLog);
+                return;
+            }
+
             const locationButton = event.target.closest("[data-location-filter]");
             if (locationButton) {
                 event.preventDefault();
@@ -221,15 +259,17 @@
     }
 
     async function reloadData() {
-        const [assets, locations, categories] = await Promise.all([
+        const [assets, locations, categories, logs] = await Promise.all([
             fetchArray("/assets/"),
             fetchArray("/locations/"),
             fetchArray("/categories/?include_features=true"),
+            fetchArray("/logs/"),
         ]);
 
         cacheAtivos = assets;
         cacheLocais = locations.length ? locations : deriveLocationsFromAssets(cacheAtivos);
         cacheCategorias = categories.length ? categories : deriveCategoriesFromAssets(cacheAtivos);
+        cacheRegistos = logs;
         cacheFeaturesPorCategoria = {};
 
         cacheCategorias.forEach((category) => {
@@ -263,8 +303,10 @@
         renderAssetsTable();
         renderCategoriesTable();
         renderLocationsTable();
+        renderLogsTable();
         updateCategoriesSearchSummary();
         updateLocationsSearchSummary();
+        updateLogsSearchSummary();
     }
 
     function addUtilityClasses(element, className) {
@@ -782,6 +824,79 @@
 
         const shouldKeepOpen = document.querySelector("[data-categories-filters-toggle]")?.getAttribute("aria-expanded") === "true";
         setCategoriesFilterDrawerOpen(shouldKeepOpen || getCategoriesSecondaryFilterCount() > 0);
+    }
+
+
+    function getLogsSecondaryFilterCount() {
+        let count = 0;
+        if (getInputValue("logs-user")) count += 1;
+        if (getInputValue("logs-action")) count += 1;
+        if ((getInputValue("logs-sort") || "date-desc") !== "date-desc") count += 1;
+        return count;
+    }
+
+    function setLogsFilterDrawerOpen(isOpen) {
+        const drawer = document.getElementById("logsFiltersDrawer");
+        const toggle = document.querySelector("[data-logs-filters-toggle]");
+        const count = getLogsSecondaryFilterCount();
+
+        if (drawer) drawer.classList.toggle("hidden", !isOpen);
+        if (toggle) {
+            toggle.setAttribute("aria-expanded", String(isOpen));
+            toggle.textContent = count ? `Filtros (${count})` : "Filtros";
+        }
+    }
+
+    function toggleLogsFilterDrawer(event) {
+        event?.preventDefault();
+        const toggle = document.querySelector("[data-logs-filters-toggle]");
+        const isOpen = toggle?.getAttribute("aria-expanded") === "true";
+        setLogsFilterDrawerOpen(!isOpen);
+    }
+
+    function clearLogFilterByKey(key) {
+        if (key === "search") setInputValue("logs-search", "");
+        if (key === "user") setInputValue("logs-user", "");
+        if (key === "action") setInputValue("logs-action", "");
+        if (key === "sort") setInputValue("logs-sort", "date-desc");
+        tablePaginationState.logs = 1;
+        renderLogsTable();
+        updateLogsSearchSummary();
+    }
+
+    function updateLogsSearchSummary() {
+        const summary = document.getElementById("logsActiveFiltersSummary");
+        if (!summary) return;
+
+        const items = [];
+        const search = getInputValue("logs-search").trim();
+        const userLabel = getSelectedFilterLabel("logs-user");
+        const actionLabel = getSelectedFilterLabel("logs-action");
+        const sortValue = getInputValue("logs-sort") || "date-desc";
+        const sortLabel = getSelectedFilterLabel("logs-sort");
+
+        if (search) items.push({ key: "search", label: "Pesquisa", value: search });
+        if (userLabel) items.push({ key: "user", label: "Utilizador", value: userLabel });
+        if (actionLabel) items.push({ key: "action", label: "Ação", value: actionLabel });
+        if (sortValue !== "date-desc" && sortLabel) items.push({ key: "sort", label: "Ordem", value: sortLabel });
+
+        summary.innerHTML = items.map((item) => `
+            <span class="${ASSET_ACTIVE_CHIP_CLASS}">
+                <strong>${escapeHTML(item.label)}:</strong> ${escapeHTML(item.value)}
+                <button type="button" class="${CHIP_REMOVE_BUTTON_CLASS}" data-clear-log-filter="${escapeHTML(item.key)}" aria-label="Remover filtro ${escapeHTML(item.label)}">×</button>
+            </span>
+        `).join("");
+
+        summary.querySelectorAll("[data-clear-log-filter]").forEach((button) => {
+            button.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                clearLogFilterByKey(button.dataset.clearLogFilter || "");
+            });
+        });
+
+        const shouldKeepOpen = document.querySelector("[data-logs-filters-toggle]")?.getAttribute("aria-expanded") === "true";
+        setLogsFilterDrawerOpen(shouldKeepOpen || getLogsSecondaryFilterCount() > 0);
     }
 
 
@@ -1547,6 +1662,276 @@
         `).join("");
     }
 
+    function getFilteredLogs() {
+        let logs = [...cacheRegistos];
+        const search = getInputValue("logs-search");
+        const user = getInputValue("logs-user");
+        const action = getInputValue("logs-action");
+        const sort = getInputValue("logs-sort") || "date-desc";
+
+        logs = logs.filter((log) => {
+            const matchesSearch = includesSearch([
+                getLogId(log),
+                formatDate(getLogDate(log)),
+                getLogUser(log),
+                getLogAction(log),
+                getLogActionLabel(log),
+                getLogTableLabel(log),
+                getLogDetails(log),
+                auditDisplayText(log.old_value_display),
+                auditDisplayText(log.new_value_display),
+                auditDisplayText(log.changes),
+            ], search);
+            const matchesUser = !user || normalize(getLogUser(log)) === normalize(user);
+            const matchesAction = !action || normalize(getLogActionLabel(log)) === normalize(action);
+            return matchesSearch && matchesUser && matchesAction;
+        });
+
+        const sortMap = {
+            "date-desc": { accessor: getLogDate, dir: -1, type: "date" },
+            "date-asc": { accessor: getLogDate, dir: 1, type: "date" },
+            "user-asc": { accessor: getLogUser, dir: 1, type: "text" },
+            "action-asc": { accessor: getLogActionLabel, dir: 1, type: "text" },
+        };
+        const config = sortMap[sort] || sortMap["date-desc"];
+        return [...logs].sort((a, b) => compareValues(config.accessor(a), config.accessor(b), config.type) * config.dir);
+    }
+
+    function renderLogsTable() {
+        const tbody = document.getElementById("logsTableBody");
+        if (!tbody) return;
+
+        const logs = getFilteredLogs();
+        updateCounter("logsResultCount", logs.length, cacheRegistos.length);
+        const pagination = paginate("logs", logs);
+        renderPagination("logs", pagination);
+
+        if (!pagination.items.length) {
+            renderEmptyRow(tbody, 5, "Nenhum registo encontrado para os teus ativos.");
+            return;
+        }
+
+        tbody.innerHTML = pagination.items.map((log) => `
+            <tr class="align-top transition hover:bg-blue-50/40 cursor-pointer" data-open-log="${escapeHTML(getLogId(log))}">
+                <td class="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">${escapeHTML(formatDate(getLogDate(log)))}</td>
+                <td class="px-4 py-3">${escapeHTML(getLogUser(log))}</td>
+                <td class="px-4 py-3"><span class="${TABLE_TITLE_CLASS}">${escapeHTML(getLogActionLabel(log))}</span></td>
+                <td class="px-4 py-3">${escapeHTML(getLogTableLabel(log))}</td>
+                <td class="px-4 py-3">
+                    <div class="font-semibold text-gray-900">${escapeHTML(getLogDetails(log))}</div>
+                    <div class="mt-2">${renderTableActions([
+                        { label: "Detalhe", variant: "secondary", title: "Ver detalhe do registo", attrs: { "data-log-action": "view", "data-log-id": getLogId(log) } },
+                        ...(canRollbackLog(log) ? [{ label: "Reverter", variant: "danger", title: getLogRollbackLabel(log), attrs: { "data-log-action": "rollback", "data-log-id": getLogId(log) } }] : [])
+                    ])}</div>
+                </td>
+            </tr>
+        `).join("");
+    }
+
+    function auditDisplayText(items) {
+        if (!items) return "";
+        if (!Array.isArray(items)) return String(items);
+        return items.map((item) => [item?.label, item?.value, item?.old, item?.new].filter(Boolean).join(" ")).join(" ");
+    }
+
+    function isAuditKeyHidden(key) {
+        return ["specs_details", "totp_secret", "password_hash", "registration_token_hash", "mfa_recovery_code_hash"].includes(String(key || ""));
+    }
+
+    function humanizeAuditKey(key) {
+        const labels = {
+            asset_id: "ID do ativo",
+            asset_state: "Estado",
+            assigned_at: "Data de atribuição",
+            assigned_to: "Atribuído a",
+            category_id: "ID da categoria",
+            category_name: "Categoria",
+            content: "Conteúdo",
+            created_at: "Criado em",
+            feature_id: "ID da característica",
+            feature_name: "Característica",
+            last_maintenance: "Última manutenção",
+            location_id: "ID do local",
+            location_name: "Local",
+            maintenance_period_months: "Período de manutenção",
+            registered_at: "Data de registo",
+            serial_number: "Número de série",
+            specs: "Características",
+            status: "Estado",
+        };
+        return labels[key] || String(key || "Campo").replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
+    }
+
+    function formatAuditFallbackValue(value) {
+        if (value === null || value === undefined || value === "") return "-";
+        if (value === true) return "Sim";
+        if (value === false) return "Não";
+        if (Array.isArray(value)) return value.map(formatAuditFallbackValue).join("; ") || "-";
+        if (typeof value === "object") {
+            return Object.entries(value)
+                .filter(([key]) => !isAuditKeyHidden(key))
+                .map(([key, item]) => `${humanizeAuditKey(key)}: ${formatAuditFallbackValue(item)}`)
+                .join("; ") || "-";
+        }
+        return String(value);
+    }
+
+    function buildAuditItemsFromRawValue(rawValue) {
+        if (!rawValue) return [];
+        if (typeof rawValue !== "object" || Array.isArray(rawValue)) {
+            return [{ label: "Valor", value: formatAuditFallbackValue(rawValue) }];
+        }
+
+        const items = [];
+        Object.entries(rawValue).forEach(([key, value]) => {
+            if (isAuditKeyHidden(key)) return;
+            if (key === "specs" && value && typeof value === "object" && !Array.isArray(value)) {
+                Object.entries(value).forEach(([specName, specValue]) => {
+                    items.push({ label: `Característica · ${specName}`, value: formatAuditFallbackValue(specValue) });
+                });
+                return;
+            }
+            items.push({ label: humanizeAuditKey(key), value: formatAuditFallbackValue(value) });
+        });
+        return items;
+    }
+
+    function getAuditItems(log, displayKey, rawKey) {
+        const displayItems = log && Array.isArray(log[displayKey]) ? log[displayKey] : [];
+        if (displayItems.length) return displayItems;
+        return buildAuditItemsFromRawValue(log ? log[rawKey] : null);
+    }
+
+    function renderAuditItemList(items, emptyText) {
+        if (!items.length) return `<p class="text-sm text-gray-500">${escapeHTML(emptyText)}</p>`;
+        return `
+            <div class="grid grid-cols-1 gap-2">
+                ${items.map((item) => `
+                    <div class="rounded-lg border border-gray-100 bg-white px-3 py-2">
+                        <p class="text-[11px] font-extrabold uppercase text-blue-900">${escapeHTML(item.label || "Campo")}</p>
+                        <p class="mt-1 break-words text-sm font-semibold text-gray-900">${escapeHTML(item.value ?? "-")}</p>
+                    </div>
+                `).join("")}
+            </div>
+        `;
+    }
+
+    function renderAuditChanges(log) {
+        const changes = Array.isArray(log?.changes) ? log.changes : [];
+        if (!changes.length) return `<p class="text-sm text-gray-500">Sem diferenças diretas para comparar.</p>`;
+
+        return `
+            <div class="space-y-2">
+                ${changes.map((change) => `
+                    <div class="rounded-xl border border-blue-100 bg-blue-50/40 p-3">
+                        <p class="text-xs font-extrabold uppercase text-blue-900">${escapeHTML(change.label || "Campo")}</p>
+                        <div class="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                            <div class="rounded-lg bg-white p-2">
+                                <p class="text-[11px] font-bold uppercase text-gray-500">Antes</p>
+                                <p class="break-words text-sm font-semibold text-gray-900">${escapeHTML(change.old ?? "-")}</p>
+                            </div>
+                            <div class="rounded-lg bg-white p-2">
+                                <p class="text-[11px] font-bold uppercase text-gray-500">Depois</p>
+                                <p class="break-words text-sm font-semibold text-gray-900">${escapeHTML(change.new ?? "-")}</p>
+                            </div>
+                        </div>
+                    </div>
+                `).join("")}
+            </div>
+        `;
+    }
+
+    function renderRollbackPanel(log) {
+        if (canRollbackLog(log)) {
+            return `
+                <section class="rounded-2xl border border-red-100 bg-red-50/70 p-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h3 class="text-sm font-black uppercase text-red-800">Reversão disponível</h3>
+                            <p class="mt-1 text-xs font-semibold text-red-700">${escapeHTML(getLogRollbackLabel(log))}. Depois de executado, este registo deixa de poder ser revertido novamente.</p>
+                        </div>
+                        <button type="button" class="rounded-lg border-2 border-red-700 bg-white px-4 py-2 text-sm font-black uppercase text-red-700 hover:bg-red-100" data-log-action="rollback" data-log-id="${escapeHTML(getLogId(log))}">Executar Reversão</button>
+                    </div>
+                </section>
+            `;
+        }
+
+        return `
+            <section class="rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                <h3 class="text-sm font-black uppercase text-gray-600">Rollback indisponível</h3>
+                <p class="mt-1 text-xs font-semibold text-gray-500">${escapeHTML(getLogRollbackReason(log))}</p>
+            </section>
+        `;
+    }
+
+    function renderLogDetail(log) {
+        const content = document.getElementById("logDetailContent");
+        if (!content) return;
+
+        const oldItems = getAuditItems(log, "old_value_display", "old_value");
+        const newItems = getAuditItems(log, "new_value_display", "new_value");
+
+        content.innerHTML = `
+            ${renderRollbackPanel(log)}
+            <section>
+                <h3 class="mb-3 text-sm font-black uppercase text-blue-900">Resumo</h3>
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
+                    ${detailCard("Data/hora", formatDate(getLogDate(log)))}
+                    ${detailCard("Utilizador", getLogUser(log))}
+                    ${detailCard("Ação", getLogActionLabel(log))}
+                    ${detailCard("Área", getLogTableLabel(log))}
+                    ${detailCard("Registo afetado", getLogRecordLabel(log))}
+                    ${detailCard("Origem", getLogOriginLabel(log))}
+                </div>
+            </section>
+            <section>
+                <h3 class="mb-3 text-sm font-black uppercase text-blue-900">O que mudou</h3>
+                ${renderAuditChanges(log)}
+            </section>
+            <section class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                    <h3 class="mb-3 text-sm font-black uppercase text-blue-900">Antes</h3>
+                    ${renderAuditItemList(oldItems, "Sem valor anterior. Normalmente acontece quando o registo foi criado.")}
+                </div>
+                <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                    <h3 class="mb-3 text-sm font-black uppercase text-blue-900">Depois</h3>
+                    ${renderAuditItemList(newItems, "Sem valor novo. Normalmente acontece quando o registo foi removido.")}
+                </div>
+            </section>
+        `;
+    }
+
+    async function rollbackRegisto(logId) {
+        const log = findLog(logId);
+        const label = log ? `${getLogRollbackLabel(log)} em ${getLogTableLabel(log)} #${getLogRecordId(log)}` : `Rollback do registo #${logId}`;
+        if (!confirm(`${label}. Tens a certeza?`)) return;
+
+        const result = await api.post(`/logs/${encodeURIComponent(logId)}/rollback`, {});
+        if (!result.success) {
+            showToast(result.error || result.message || "Não foi possível executar o rollback.", true);
+            return;
+        }
+
+        showToast(result.message || "Rollback executado com sucesso.");
+        fecharModalGestor("modalDetalheRegisto");
+        await reloadData();
+    }
+
+    async function verDetalheRegisto(logId) {
+        let log = findLog(logId);
+        const result = await api.get(`/logs/${encodeURIComponent(logId)}`);
+        if (result.success && result.data) log = result.data;
+
+        if (!log) {
+            showToast("Registo não encontrado.", true);
+            return;
+        }
+
+        renderLogDetail(log);
+        abrirModalGestor("modalDetalheRegisto");
+    }
+
+
     function getAssetsNeedingAction() {
         return cacheAtivos
             .filter((asset) => getAssetStatus(asset) !== "Bom Estado" || isMaintenanceDue(asset))
@@ -1629,6 +2014,8 @@
         populateSelectFromRecords("assets-location", cacheLocais, getLocationId, getLocationName, "Todos");
         populateSelectFromRecords("assets-category", cacheCategorias, getCategoryId, getCategoryName, "Todas");
         populateSelect("assets-status", uniqueValues(cacheAtivos.map(getAssetStatus)), "Todos");
+        populateSelect("logs-user", uniqueValues(cacheRegistos.map(getLogUser)), "Todos");
+        populateSelect("logs-action", uniqueValues(cacheRegistos.map(getLogActionLabel)), "Todas");
     }
 
     function populateAssetModalSelects() {
@@ -2424,6 +2811,15 @@
         updateCategoriesSearchSummary();
     }
 
+    function limparFiltrosRegistos() {
+        ["logs-search", "logs-user", "logs-action"].forEach((id) => setInputValue(id, ""));
+        setInputValue("logs-sort", "date-desc");
+        tablePaginationState.logs = 1;
+        setLogsFilterDrawerOpen(false);
+        renderLogsTable();
+        updateLogsSearchSummary();
+    }
+
     function scrollParaTabelaAtivos() {
         const target = document.getElementById("assetsTableBody")?.closest(".table-shell")
             || document.getElementById("assetsPagination")
@@ -2464,6 +2860,7 @@
         if (group === "categories") renderCategoriesTable();
         if (group === "locations") renderLocationsTable();
         if (group === "actionAssets") renderActionAssetsTable();
+        if (group === "logs") renderLogsTable();
     }
 
     function paginate(group, items) {
@@ -2604,6 +3001,23 @@
         const id = String(getLocationId(location));
         return cacheAtivos.filter((asset) => String(getAssetLocationId(asset)) === id).length;
     }
+
+    function getLogId(log) { return firstValue(log, ["log_id", "id", "audit_log_id"], ""); }
+    function getLogRecordId(log) { return firstValue(log, ["record_id", "entity_id", "target_id"], ""); }
+    function getLogRecordLabel(log) { return firstValue(log, ["record_label", "entity_label", "target_label"], `${getLogTableLabel(log)} #${getLogRecordId(log)}`); }
+    function getLogOriginLabel(log) { return firstValue(log, ["origin_label", "origem_label"], firstValue(log, ["origin", "origem"], "Sistema")); }
+    function getLogDate(log) { return firstValue(log, ["created_at", "date", "data"], ""); }
+    function getLogUser(log) { return firstValue(log, ["user_email", "email", "user", "utilizador"], "Sistema"); }
+    function getLogAction(log) { return firstValue(log, ["action", "acao"], ""); }
+    function getLogActionLabel(log) { return firstValue(log, ["action_label", "acao_label"], getLogAction(log) || "Ação"); }
+    function getLogTable(log) { return firstValue(log, ["table_name", "table", "tabela"], "assets"); }
+    function getLogTableLabel(log) { return firstValue(log, ["table_label", "area"], getLogTable(log) === "assets" ? "Ativos" : getLogTable(log)); }
+    function getLogDetails(log) { return firstValue(log, ["details", "description", "descricao"], `${getLogActionLabel(log)} em ${getLogTableLabel(log)} #${getLogRecordId(log)}`); }
+    function canRollbackLog(log) { return firstValue(log, ["can_rollback", "rollback_available"], false) === true; }
+    function getLogRollbackReason(log) { return firstValue(log, ["rollback_reason"], "Rollback indisponível."); }
+    function getLogRollbackLabel(log) { return firstValue(log, ["rollback_label"], "Rollback"); }
+    function findLog(logId) { return cacheRegistos.find((log) => String(getLogId(log)) === String(logId)); }
+
 
     function getCategoryId(category) { return firstValue(category, ["category_id", "id", "categoria_id", "id_category"], "-"); }
     function getCategoryName(category) { return firstValue(category, ["category_name", "name", "nome", "categoria"], "Sem categoria"); }

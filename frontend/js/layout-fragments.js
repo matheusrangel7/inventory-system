@@ -81,6 +81,7 @@
             { id: "ativos", label: "Ativos", icon: "assets" },
             { id: "categorias", label: "Categorias", icon: "categories" },
             { id: "locais", label: "Locais", icon: "locations" },
+            { id: "registos", label: "Registos", icon: "logs" },
         ],
     };
 

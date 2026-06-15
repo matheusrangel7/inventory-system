@@ -3,7 +3,7 @@ from flask import Blueprint, request
 from app.security.permissions import Permission
 from app.services import log_service, rollback_service
 from app.services.scheduler_service import check_maintenance
-from app.utils.decorators import get_current_user_id, permission_required
+from app.utils.decorators import get_current_role, get_current_user_id, permission_required
 from app.utils.responses import error, success
 
 logs_bp = Blueprint("logs", __name__, url_prefix="/api/logs")
@@ -14,7 +14,11 @@ logs_bp = Blueprint("logs", __name__, url_prefix="/api/logs")
 def list_logs():
     limit = request.args.get("limit", default=200, type=int)
     limit = max(1, min(limit or 200, 1000))
-    return success(data=log_service.get_all_logs(limit=limit))
+    return success(data=log_service.get_all_logs(
+        limit=limit,
+        viewer_id=get_current_user_id(),
+        viewer_role=get_current_role(),
+    ))
 
 
 @logs_bp.route("/trigger-maintenance-check", methods=["POST"])
@@ -30,7 +34,11 @@ def trigger_maintenance_check():
 @logs_bp.route("/<int:log_id>", methods=["GET"])
 @permission_required(Permission.LOGS_READ)
 def get_log(log_id: int):
-    log = log_service.get_log_by_id(log_id)
+    log = log_service.get_log_by_id(
+        log_id,
+        viewer_id=get_current_user_id(),
+        viewer_role=get_current_role(),
+    )
     if not log:
         return error("Registo de auditoria não encontrado.", status=404)
     return success(data=log)
@@ -39,7 +47,11 @@ def get_log(log_id: int):
 @logs_bp.route("/<int:log_id>/rollback", methods=["POST"])
 @permission_required(Permission.LOGS_READ)
 def rollback_log(log_id: int):
-    ok, message, data = rollback_service.rollback_log(log_id, actor_id=get_current_user_id())
+    ok, message, data = rollback_service.rollback_log(
+        log_id,
+        actor_id=get_current_user_id(),
+        actor_role=get_current_role(),
+    )
     if not ok:
         return error(message, status=400)
     return success(message=message, data=data)

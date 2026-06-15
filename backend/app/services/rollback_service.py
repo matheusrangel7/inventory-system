@@ -14,6 +14,103 @@ from app.models.user import User
 from app.utils.audit import log_action
 
 ROLLBACKABLE_TABLES = {"assets", "categories", "features", "locations", "users"}
+MANAGER_ROLLBACKABLE_TABLES = {"assets"}
+
+
+def _normalized_role(role: str | None) -> str:
+    return str(role or "").strip()
+
+
+def _rollback_origin_for_log_id(log_id: int) -> str:
+    return f"rollback:{log_id}"
+
+
+def has_already_been_rolled_back(log_id: int) -> bool:
+    if not log_id:
+        return False
+    return db.session.execute(
+        select(AuditLog.log_id)
+        .where(AuditLog.origin == _rollback_origin_for_log_id(int(log_id)))
+        .limit(1)
+    ).scalar_one_or_none() is not None
+
+
+def _manager_location_ids(manager_id: int | None) -> set[int]:
+    if manager_id is None:
+        return set()
+    return {
+        int(location_id)
+        for location_id in db.session.execute(
+            select(Location.location_id).where(
+                Location.location_manager_id == manager_id,
+                Location.is_active == True,
+            )
+        ).scalars().all()
+    }
+
+
+def _snapshot_location_id(snapshot: Any) -> int | None:
+    if not isinstance(snapshot, dict):
+        return None
+    return _to_int(snapshot.get("location_id") or snapshot.get("local_id") or snapshot.get("id_location") or snapshot.get("id_local"))
+
+
+def _current_asset_location_id(asset_id: int | None) -> int | None:
+    if not asset_id:
+        return None
+    return db.session.execute(
+        select(Asset.location_id).where(Asset.asset_id == asset_id).limit(1)
+    ).scalar_one_or_none()
+
+
+def asset_log_location_ids(log: AuditLog | None) -> set[int]:
+    if not log or log.table_name != "assets":
+        return set()
+
+    raw_ids = {
+        _current_asset_location_id(log.record_id),
+        _snapshot_location_id(log.old_value),
+        _snapshot_location_id(log.new_value),
+    }
+    return {int(location_id) for location_id in raw_ids if location_id is not None}
+
+
+def is_log_visible_to_manager(log: AuditLog | None, manager_id: int | None) -> bool:
+    if not log or manager_id is None:
+        return False
+    if log.table_name not in MANAGER_ROLLBACKABLE_TABLES:
+        return False
+    return bool(asset_log_location_ids(log) & _manager_location_ids(manager_id))
+
+
+def _manager_rollback_target_location_id(log: AuditLog) -> int | None:
+    action = str(log.action or "").upper()
+    if action in {"UPDATE", "DELETE"}:
+        return _snapshot_location_id(log.old_value)
+    if action == "INSERT":
+        return _snapshot_location_id(log.new_value) or _current_asset_location_id(log.record_id)
+    return None
+
+
+def can_manager_rollback_log(log: AuditLog | None, manager_id: int | None) -> tuple[bool, str]:
+    if not log or manager_id is None:
+        return False, "Registo de auditoria não encontrado."
+
+    if log.table_name not in MANAGER_ROLLBACKABLE_TABLES:
+        return False, "Gestores só podem reverter registos de ativos."
+
+    manager_locations = _manager_location_ids(manager_id)
+    if not manager_locations:
+        return False, "Não tens salas atribuídas para poder reverter registos."
+
+    if not (asset_log_location_ids(log) & manager_locations):
+        return False, "Este registo não pertence às tuas salas atribuídas."
+
+    target_location_id = _manager_rollback_target_location_id(log)
+    if target_location_id is not None and target_location_id not in manager_locations:
+        return False, "O rollback iria colocar o ativo fora das tuas salas atribuídas."
+
+    return True, "Rollback disponível."
 
 
 def _clean(value: Any) -> str:
@@ -67,12 +164,19 @@ def _parse_datetime(value: Any) -> datetime | None:
         return None
 
 
-def is_rollbackable(log: AuditLog | None) -> tuple[bool, str]:
+def is_rollbackable(
+    log: AuditLog | None,
+    actor_id: int | None = None,
+    actor_role: str | None = None,
+) -> tuple[bool, str]:
     if not log:
         return False, "Registo de auditoria não encontrado."
 
     if str(log.origin or "").startswith("rollback:"):
         return False, "Este registo já foi criado por um rollback."
+
+    if has_already_been_rolled_back(log.log_id):
+        return False, "Este registo já foi revertido."
 
     action = str(log.action or "").upper()
     if action not in {"INSERT", "UPDATE", "DELETE"}:
@@ -80,6 +184,11 @@ def is_rollbackable(log: AuditLog | None) -> tuple[bool, str]:
 
     if log.table_name not in ROLLBACKABLE_TABLES:
         return False, "Esta área ainda não tem rollback automático."
+
+    if _normalized_role(actor_role) == "Gestor":
+        manager_ok, manager_reason = can_manager_rollback_log(log, actor_id)
+        if not manager_ok:
+            return False, manager_reason
 
     if log.table_name == "users" and action == "INSERT":
         return False, "Criação de utilizadores não pode ser revertida."
@@ -93,9 +202,13 @@ def is_rollbackable(log: AuditLog | None) -> tuple[bool, str]:
     return True, "Rollback disponível."
 
 
-def rollback_log(log_id: int, actor_id: int | None = None) -> tuple[bool, str, dict | None]:
+def rollback_log(
+    log_id: int,
+    actor_id: int | None = None,
+    actor_role: str | None = None,
+) -> tuple[bool, str, dict | None]:
     log = db.session.get(AuditLog, log_id)
-    ok, reason = is_rollbackable(log)
+    ok, reason = is_rollbackable(log, actor_id=actor_id, actor_role=actor_role)
     if not ok:
         return False, reason, None
 
@@ -124,7 +237,7 @@ def rollback_log(log_id: int, actor_id: int | None = None) -> tuple[bool, str, d
 
 
 def _rollback_origin(log: AuditLog) -> str:
-    return f"rollback:{log.log_id}"
+    return _rollback_origin_for_log_id(log.log_id)
 
 
 def _ensure_no_other_asset_with_serial(asset_id: int, serial_number: str) -> None:
@@ -139,6 +252,26 @@ def _asset_snapshot_dict(asset: Asset) -> dict:
     from app.services.inventory_service import asset_to_dict
 
     return asset_to_dict(asset)
+
+
+def _has_complete_asset_snapshot(snapshot: dict) -> bool:
+    if not isinstance(snapshot, dict):
+        return False
+    return bool(
+        _clean(snapshot.get("serial_number"))
+        and _to_int(snapshot.get("category_id"))
+        and _to_int(snapshot.get("location_id"))
+    )
+
+
+def _merge_partial_asset_snapshot(current_snapshot: dict, rollback_snapshot: dict) -> dict:
+    merged = dict(current_snapshot)
+    if isinstance(rollback_snapshot, dict):
+        for key, value in rollback_snapshot.items():
+            if key == "specs_details" and not value:
+                continue
+            merged[key] = value
+    return merged
 
 
 def _apply_asset_snapshot(asset: Asset, snapshot: dict) -> None:
@@ -252,6 +385,9 @@ def _rollback_asset(log: AuditLog, actor_id: int | None) -> dict:
         return new_value
 
     snapshot = log.old_value or {}
+    if not _has_complete_asset_snapshot(snapshot):
+        snapshot = _merge_partial_asset_snapshot(old_current, snapshot)
+
     _apply_asset_snapshot(asset, snapshot)
     _restore_asset_specs(asset, snapshot)
     db.session.flush()

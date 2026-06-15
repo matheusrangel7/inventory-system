@@ -2271,6 +2271,10 @@ video {
     grid-template-columns: minmax(15rem,1fr) minmax(10rem,0.55fr) minmax(7.5rem,auto) auto;
   }
 
+  .xl\:grid-cols-6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
   .xl\:self-end {
     align-self: flex-end;
   }

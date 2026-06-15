@@ -2688,6 +2688,18 @@ function getLogDate(log) {
     return primeiroValor(log, ["created_at", "timestamp", "date", "data_hora", "data", "datetime"], "");
 }
 
+function getLogRecordId(log) {
+    return primeiroValor(log, ["record_id", "entity_id", "target_id"], "");
+}
+
+function getLogRecordLabel(log) {
+    return primeiroValor(log, ["record_label", "entity_label", "target_label"], `${getLogTableLabel(log)} #${getLogRecordId(log)}`);
+}
+
+function getLogOriginLabel(log) {
+    return primeiroValor(log, ["origin_label", "origem_label"], primeiroValor(log, ["origin", "origem"], "Sistema"));
+}
+
 function getLogUser(log) {
     return primeiroValor(log, ["user_email", "email", "user", "utilizador", "username"], "Sistema");
 }
@@ -4243,11 +4255,13 @@ function renderLogDetail(log) {
                 ${renderRollbackPanel(log)}
                 <section>
                     <h3 class="mb-3 text-sm font-black uppercase text-blue-900">Resumo</h3>
-                    <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
+                    <div class="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
                         ${renderDetailField("Data/hora", formatarData(getLogDate(log)))}
                         ${renderDetailField("Utilizador", getLogUser(log))}
                         ${renderDetailField("Ação", getLogActionLabel(log))}
                         ${renderDetailField("Área", getLogTableLabel(log))}
+                        ${renderDetailField("Registo afetado", getLogRecordLabel(log))}
+                        ${renderDetailField("Origem", getLogOriginLabel(log))}
                     </div>
                 </section>
                 <section>
