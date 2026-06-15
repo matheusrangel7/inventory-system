@@ -41,6 +41,7 @@
     const ASSET_COLUMN_OPTION_ACTIVE_CLASS = "border-blue-300 bg-blue-50 text-blue-900 ring-1 ring-blue-100";
     const ASSET_COLUMN_OPTION_REQUIRED_CLASS = "cursor-not-allowed opacity-80";
     const ASSET_COLUMN_OPTION_FEATURE_CLASS = "bg-slate-50";
+    const ASSET_TEMPLATE_OPTION_LIMIT = 80;
     const CATEGORY_FEATURE_ROW_CLASS = "grid grid-cols-1 gap-3 rounded-xl border border-blue-100 bg-white p-3 md:grid-cols-[minmax(12rem,1fr)_minmax(10rem,0.8fr)_auto_auto]";
     const CATEGORY_FEATURE_FIELD_CLASS = "flex flex-col gap-1";
     const CATEGORY_FEATURE_REPEATABLE_CLASS = "flex items-center gap-2 text-xs font-black uppercase tracking-wide text-blue-900";
@@ -51,6 +52,8 @@
     let cacheLocais = [];
     let cacheCategorias = [];
     let cacheFeaturesPorCategoria = {};
+    let cacheValoresSpecsPorFeature = {};
+    let cacheAtivosRegistadosPorCategoria = {};
     let chartEstado = null;
     let chartDistribuicao = null;
     let assetBeingViewedId = null;
@@ -123,8 +126,10 @@
         document.getElementById("btnLimparFiltrosLocais")?.addEventListener("click", limparFiltrosLocais);
         document.getElementById("btnLimparFiltrosCategorias")?.addEventListener("click", limparFiltrosCategorias);
         document.getElementById("asset-category")?.addEventListener("change", () => atualizarCamposSpecsDoAtivo());
+        document.getElementById("asset-existing-template-select")?.addEventListener("change", (event) => aplicarAtivoExistenteSelecionado(event.target.value));
         document.getElementById("asset-state")?.addEventListener("change", preencherManutencaoSeBomEstado);
         document.getElementById("formAtivoGestor")?.addEventListener("submit", handleAssetSubmit);
+        document.getElementById("assetSpecsFields")?.addEventListener("change", handleSpecReuseChange);
         document.getElementById("btnEditarAtivoDetalhe")?.addEventListener("click", () => {
             const asset = findAsset(assetBeingViewedId);
             if (!asset) return;
@@ -1158,7 +1163,7 @@
                 sublabel: categoryName || "Característica",
             },
             tdClass: "px-4 py-3",
-            render: (asset) => formatSpecValueForTable(getAssetSpecRawValue(asset, feature)),
+            render: (asset) => formatSpecValueForTable(getAssetSpecRawValue(asset, feature), feature),
         }));
     }
 
@@ -1369,17 +1374,20 @@
         return key ? specs[key] : "";
     }
 
-    function formatSpecValueForTable(value) {
-        const values = flattenValue(value).filter((item) => String(item).trim() !== "").map(formatSpecPrimitive);
+    function formatSpecValueForTable(value, feature = null) {
+        const values = feature && hasFeatureFieldSchema(feature)
+            ? formatStructuredSpecValue(feature, value)
+            : flattenValue(value).filter((item) => String(item).trim() !== "").map(formatSpecPrimitive);
+
         if (!values.length) return `<span class="text-xs font-semibold text-gray-400">—</span>`;
         if (values.length === 1) {
-            return `<span class="block max-w-44 truncate text-sm font-semibold text-gray-900" title="${escapeHTML(values[0])}">${escapeHTML(values[0])}</span>`;
+            return `<span class="block max-w-56 truncate text-sm font-semibold text-gray-900" title="${escapeHTML(values[0])}">${escapeHTML(values[0])}</span>`;
         }
 
         const visible = values.slice(0, 3);
         const remaining = values.length - visible.length;
         return `
-            <div class="flex max-w-56 flex-wrap gap-1">
+            <div class="flex max-w-64 flex-wrap gap-1">
                 ${visible.map((item) => `<span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-800" title="${escapeHTML(item)}">${escapeHTML(item)}</span>`).join("")}
                 ${remaining > 0 ? `<span class="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-900">+${remaining}</span>` : ""}
             </div>
@@ -1442,6 +1450,11 @@
 
     function getCategoryFeaturesSync(category) {
         if (!category) return [];
+        if (typeof category !== "object") {
+            const found = cacheCategorias.find((item) => String(getCategoryId(item)) === String(category));
+            if (found) return getCategoryFeaturesSync(found);
+            return cacheFeaturesPorCategoria[String(category)] || [];
+        }
         if (Array.isArray(category.features)) return category.features;
         return cacheFeaturesPorCategoria[String(getCategoryId(category))] || [];
     }
@@ -1677,6 +1690,7 @@
         serialHint?.classList.toggle("hidden", !asset);
 
         renderAssetSpecsFields([]);
+        resetAssetTemplateSelect();
 
         if (asset) {
             setInputValue("asset-serial", getAssetSerial(asset));
@@ -1700,6 +1714,7 @@
         }
         const features = await getFeaturesForCategory(categoryId);
         renderAssetSpecsFields(features, asset);
+        updateAssetTemplateSelect();
     }
 
     async function getFeaturesForCategory(categoryId) {
@@ -1712,6 +1727,162 @@
         return features;
     }
 
+    function getSpecReuseDatalistId(featureId) {
+        return `gestor-spec-values-${String(featureId).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+    }
+
+    function getSpecReuseCacheKey(featureId, fieldKey = "") {
+        const safeFeatureId = String(featureId || "");
+        const safeFieldKey = String(fieldKey || "");
+        return safeFieldKey ? `${safeFeatureId}::${safeFieldKey}` : safeFeatureId;
+    }
+
+    function renderSchemaFieldReuseSelect(feature, field) {
+        const featureId = getFeatureId(feature);
+        const fieldKey = getSchemaFieldKey(field);
+        if (!featureId || !fieldKey) return "";
+
+        return `
+            <select data-spec-existing-field-select data-feature-id="${escapeHTML(featureId)}" data-field-key="${escapeHTML(fieldKey)}"
+                class="asset-spec-existing-field-select mt-2 w-full rounded-lg border-2 border-blue-900 bg-white px-3 py-2 text-xs font-bold text-blue-900 outline-none focus:ring-2 focus:ring-blue-900/20" disabled>
+                <option value="">Valores registados deste campo...</option>
+            </select>
+        `;
+    }
+
+    function renderSpecReuseSelect(feature) {
+        if (String(getFeatureType(feature)).toLowerCase() === "boolean") return "";
+        return `
+            <select data-spec-existing-select data-feature-id="${escapeHTML(getFeatureId(feature))}"
+                class="asset-spec-existing-select mt-2 w-full rounded-lg border-2 border-blue-900 bg-white px-3 py-2 text-xs font-bold text-blue-900 outline-none focus:ring-2 focus:ring-blue-900/20" disabled>
+                <option value="">Valores registados...</option>
+            </select>
+        `;
+    }
+
+    async function getFeatureRegisteredValues(featureId, fieldKey = "") {
+        const key = String(featureId || "");
+        const schemaFieldKey = String(fieldKey || "");
+        if (!key) return [];
+
+        const cacheKey = getSpecReuseCacheKey(key, schemaFieldKey);
+        if (Array.isArray(cacheValoresSpecsPorFeature[cacheKey])) return cacheValoresSpecsPorFeature[cacheKey];
+
+        const query = schemaFieldKey ? `?field_key=${encodeURIComponent(schemaFieldKey)}` : "";
+        const result = await api.get(`/assets/features/${encodeURIComponent(key)}/values${query}`);
+        const values = result.success && Array.isArray(result.data) ? result.data : [];
+        cacheValoresSpecsPorFeature[cacheKey] = values;
+        return values;
+    }
+
+    function optionDataValue(item) {
+        return item && typeof item === "object" ? item.value : item;
+    }
+
+    function optionDataLabel(item) {
+        return item && typeof item === "object" ? (item.label || item.value) : item;
+    }
+
+    function updateSpecReuseOptions(featureId, values = [], fieldKey = "") {
+        const key = String(featureId || "");
+        const schemaFieldKey = String(fieldKey || "");
+
+        if (schemaFieldKey) {
+            document.querySelectorAll("[data-spec-existing-field-select]").forEach((select) => {
+                if (String(select.dataset.featureId) !== key || String(select.dataset.fieldKey) !== schemaFieldKey) return;
+                const currentValue = select.value;
+                select.innerHTML = `<option value="">Valores registados deste campo...</option>` + values.map((item) => {
+                    const value = optionDataValue(item);
+                    const label = optionDataLabel(item);
+                    return `<option value="${escapeHTML(value)}">${escapeHTML(label)}</option>`;
+                }).join("");
+                select.disabled = values.length === 0;
+                select.value = values.some((item) => String(optionDataValue(item)) === String(currentValue)) ? currentValue : "";
+            });
+            return;
+        }
+
+        const datalistId = getSpecReuseDatalistId(key);
+        const datalistOptions = values.map((item) => {
+            const value = optionDataValue(item);
+            const label = optionDataLabel(item);
+            return `<option value="${escapeHTML(value)}" label="${escapeHTML(label)}"></option>`;
+        }).join("");
+
+        document.querySelectorAll("datalist[data-spec-values-list]").forEach((datalist) => {
+            if (datalist.id === datalistId) datalist.innerHTML = datalistOptions;
+        });
+
+        document.querySelectorAll("[data-spec-existing-select]").forEach((select) => {
+            if (String(select.dataset.featureId) !== key) return;
+            const currentValue = select.value;
+            select.innerHTML = `<option value="">Valores registados...</option>` + values.map((item) => {
+                const value = optionDataValue(item);
+                const label = optionDataLabel(item);
+                return `<option value="${escapeHTML(value)}">${escapeHTML(label)}</option>`;
+            }).join("");
+            select.disabled = values.length === 0;
+            select.value = values.some((item) => String(optionDataValue(item)) === String(currentValue)) ? currentValue : "";
+        });
+    }
+
+    async function hydrateSpecReuseValues(features = []) {
+        await Promise.all((features || []).map(async (feature) => {
+            const featureId = getFeatureId(feature);
+            const featureType = String(getFeatureType(feature)).toLowerCase();
+
+            if (featureType !== "boolean") {
+                const values = await getFeatureRegisteredValues(featureId);
+                updateSpecReuseOptions(featureId, values);
+            }
+
+            if (hasFeatureFieldSchema(feature)) {
+                await Promise.all(getFeatureFieldSchema(feature).map(async (field) => {
+                    const fieldKey = getSchemaFieldKey(field);
+                    if (!fieldKey) return;
+                    const values = await getFeatureRegisteredValues(featureId, fieldKey);
+                    updateSpecReuseOptions(featureId, values, fieldKey);
+                }));
+            }
+        }));
+    }
+
+    function handleSpecReuseChange(event) {
+        const fieldSelect = event.target.closest("[data-spec-existing-field-select]");
+        if (fieldSelect) {
+            if (!fieldSelect.value) return;
+            const row = fieldSelect.closest("[data-spec-input-row]") || fieldSelect.parentElement;
+            if (!row) return;
+            const fieldKey = fieldSelect.dataset.fieldKey;
+            const input = Array.from(row.querySelectorAll("[data-schema-field-key]"))
+                .find(item => String(item.dataset.schemaFieldKey) === String(fieldKey));
+            if (!input) return;
+            input.value = fieldSelect.value;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            return;
+        }
+
+        const select = event.target.closest("[data-spec-existing-select]");
+        if (!select || !select.value) return;
+        const row = select.closest("[data-spec-input-row]") || select.parentElement;
+        if (!row) return;
+
+        if (row.matches("[data-structured-spec-row]")) {
+            const structuredValue = parseSpecStructuredValue(select.value);
+            row.querySelectorAll(".asset-structured-spec-input").forEach((input) => {
+                const key = input.dataset.schemaFieldKey;
+                input.value = key && structuredValue[key] !== undefined && structuredValue[key] !== null ? String(structuredValue[key]) : "";
+                input.dispatchEvent(new Event("input", { bubbles: true }));
+            });
+            return;
+        }
+
+        const input = row.querySelector(".asset-spec-input");
+        if (!input) return;
+        input.value = select.value;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
     function renderAssetSpecsFields(features, asset = null) {
         const container = document.getElementById("assetSpecsFields");
         if (!container) return;
@@ -1722,6 +1893,7 @@
         }
 
         container.innerHTML = features.map((feature) => renderFeatureInput(feature)).join("");
+        hydrateSpecReuseValues(features);
 
         container.querySelectorAll("[data-add-feature-value]").forEach((button) => {
             button.addEventListener("click", () => {
@@ -1738,16 +1910,99 @@
         if (asset) fillAssetSpecs(asset);
     }
 
+    function renderSchemaFieldControl(feature, field, value = "") {
+        const featureId = getFeatureId(feature);
+        const key = getSchemaFieldKey(field);
+        const type = getSchemaFieldType(field);
+        const label = getSchemaFieldLabel(field);
+        const unit = getSchemaFieldUnit(field);
+        const required = isSchemaFieldRequired(field);
+        const safeValue = value === undefined || value === null ? "" : String(value);
+        const commonClass = "asset-structured-spec-input w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20";
+        const fieldReuseSelect = renderSchemaFieldReuseSelect(feature, field);
+
+        if (type === "boolean") {
+            const normalized = safeValue.toLowerCase();
+            const selectedValue = ["true", "1", "sim", "yes"].includes(normalized) ? "true" : (["false", "0", "nao", "não", "no"].includes(normalized) ? "false" : "");
+            return `
+                <label class="block min-w-0">
+                    <span class="mb-1 block text-[11px] font-black uppercase text-blue-900">${escapeHTML(label)}${required ? " *" : ""}</span>
+                    <select data-feature-id="${escapeHTML(featureId)}" data-schema-field-key="${escapeHTML(key)}" class="${commonClass}">
+                        ${renderSelectEmptyOption("Selecionar", { asPlaceholder: true, selected: !selectedValue })}
+                        <option value="true" ${selectedValue === "true" ? "selected" : ""}>Sim</option>
+                        <option value="false" ${selectedValue === "false" ? "selected" : ""}>Não</option>
+                    </select>
+                    ${fieldReuseSelect}
+                </label>
+            `;
+        }
+
+        if (type === "select") {
+            const options = getSchemaFieldOptions(field);
+            return `
+                <label class="block min-w-0">
+                    <span class="mb-1 block text-[11px] font-black uppercase text-blue-900">${escapeHTML(label)}${required ? " *" : ""}</span>
+                    <select data-feature-id="${escapeHTML(featureId)}" data-schema-field-key="${escapeHTML(key)}" class="${commonClass}">
+                        ${renderSelectEmptyOption("Selecionar", { asPlaceholder: true, selected: !safeValue })}
+                        ${options.map((option) => `<option value="${escapeHTML(option)}" ${String(option) === safeValue ? "selected" : ""}>${escapeHTML(option)}</option>`).join("")}
+                    </select>
+                    ${fieldReuseSelect}
+                </label>
+            `;
+        }
+
+        return `
+            <label class="block min-w-0">
+                <span class="mb-1 block text-[11px] font-black uppercase text-blue-900">${escapeHTML(label)}${unit ? ` (${escapeHTML(unit)})` : ""}${required ? " *" : ""}</span>
+                <input data-feature-id="${escapeHTML(featureId)}" data-schema-field-key="${escapeHTML(key)}" type="${escapeHTML(inputTypeForFeature(type))}" value="${escapeHTML(safeValue)}" class="${commonClass}" placeholder="${escapeHTML(firstValue(field, ["placeholder"], ""))}">
+                ${fieldReuseSelect}
+            </label>
+        `;
+    }
+
+    function renderStructuredFeatureRow(feature, value = "") {
+        const schema = getFeatureFieldSchema(feature);
+        const structuredValue = parseSpecStructuredValue(value);
+        return `
+            <div class="asset-spec-value-row asset-structured-spec-row rounded-xl border border-blue-100 bg-blue-50/30 p-3" data-repeatable-row data-spec-input-row data-structured-spec-row>
+                <div class="asset-structured-fields-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    ${schema.map((field) => renderSchemaFieldControl(feature, field, structuredValue[getSchemaFieldKey(field)])).join("")}
+                </div>
+                <div class="asset-structured-actions mt-3 flex flex-wrap items-center gap-2">
+                    ${renderSpecReuseSelect(feature)}
+                    <button type="button" data-remove-feature-value class="rounded-lg border-2 border-red-600 px-3 py-2 text-xs font-bold uppercase text-red-600 hover:bg-red-50">Remover</button>
+                </div>
+            </div>
+        `;
+    }
+
     function renderFeatureInput(feature) {
         const featureId = getFeatureId(feature);
         const name = getFeatureName(feature);
         const type = String(getFeatureType(feature)).toLowerCase();
         const isMultiple = isFeatureMultiple(feature);
 
+        if (hasFeatureFieldSchema(feature)) {
+            return `
+                <div class="asset-spec-feature-card md:col-span-2 rounded-lg border border-blue-100 bg-white p-3" data-repeatable-feature="${escapeHTML(featureId)}" data-feature-type="${escapeHTML(type)}" data-structured-feature="true" data-is-multiple="${isMultiple ? "true" : "false"}">
+                    <div class="asset-spec-feature-header mb-2 flex items-center justify-between gap-3">
+                        <div>
+                            <label class="block text-xs font-extrabold uppercase text-blue-900">${escapeHTML(name)}</label>
+                            <p class="mt-1 text-[11px] font-semibold text-gray-500">Campos definidos pelo administrador. Preenche neste formato para todos usarem o mesmo padrão.</p>
+                        </div>
+                        ${isMultiple ? `<button type="button" data-add-feature-value="${escapeHTML(featureId)}" class="rounded-md border-2 border-blue-900 bg-white px-2 py-1 text-xs font-bold uppercase text-blue-900 hover:bg-gray-100">+ Valor</button>` : ""}
+                    </div>
+                    <div class="space-y-2" data-repeatable-values="${escapeHTML(featureId)}">
+                        ${renderStructuredFeatureRow(feature)}
+                    </div>
+                </div>
+            `;
+        }
+
         if (isMultiple) {
             return `
-                <div class="md:col-span-2 rounded-lg border border-blue-100 bg-white p-3" data-repeatable-feature="${escapeHTML(featureId)}" data-feature-type="${escapeHTML(type)}">
-                    <div class="mb-2 flex items-center justify-between gap-3">
+                <div class="asset-spec-feature-card md:col-span-2 rounded-lg border border-blue-100 bg-white p-3" data-repeatable-feature="${escapeHTML(featureId)}" data-feature-type="${escapeHTML(type)}">
+                    <div class="asset-spec-feature-header mb-2 flex items-center justify-between gap-3">
                         <label class="block text-xs font-extrabold uppercase text-blue-900">${escapeHTML(name)}</label>
                         <button type="button" data-add-feature-value="${escapeHTML(featureId)}"
                             class="rounded-md border-2 border-blue-900 bg-white px-2 py-1 text-xs font-bold uppercase text-blue-900 hover:bg-gray-100">+ Valor</button>
@@ -1755,6 +2010,8 @@
                     <div class="space-y-2" data-repeatable-values="${escapeHTML(featureId)}">
                         ${renderRepeatableFeatureRow(feature)}
                     </div>
+                    ${type !== "boolean" ? `<datalist id="${escapeHTML(getSpecReuseDatalistId(featureId))}" data-spec-values-list></datalist>` : ""}
+                    <p class="mt-2 text-[11px] font-semibold text-gray-500">Ao escolher um valor existente, ele é copiado para este ativo, sem associação ao ativo antigo.</p>
                 </div>
             `;
         }
@@ -1773,10 +2030,13 @@
         }
 
         return `
-            <div>
+            <div class="asset-spec-field-card" data-spec-input-row>
                 <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">${escapeHTML(name)}</label>
-                <input data-feature-id="${escapeHTML(featureId)}" type="${escapeHTML(inputTypeForFeature(type))}"
+                <input data-feature-id="${escapeHTML(featureId)}" list="${escapeHTML(getSpecReuseDatalistId(featureId))}" type="${escapeHTML(inputTypeForFeature(type))}"
                     class="asset-spec-input w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="Valor">
+                ${renderSpecReuseSelect(feature)}
+                <datalist id="${escapeHTML(getSpecReuseDatalistId(featureId))}" data-spec-values-list></datalist>
+                <p class="mt-1 text-[11px] font-semibold text-gray-500">Podes escolher um valor já registado ou escrever um novo.</p>
             </div>
         `;
     }
@@ -1784,6 +2044,10 @@
     function renderRepeatableFeatureRow(feature, value = "") {
         const type = String(getFeatureType(feature)).toLowerCase();
         const featureId = getFeatureId(feature);
+
+        if (hasFeatureFieldSchema(feature)) {
+            return renderStructuredFeatureRow(feature, value);
+        }
 
         if (type === "boolean") {
             return `
@@ -1799,9 +2063,10 @@
         }
 
         return `
-            <div class="flex gap-2" data-repeatable-row>
-                <input data-feature-id="${escapeHTML(featureId)}" type="${escapeHTML(inputTypeForFeature(type))}" value="${escapeHTML(value)}"
-                    class="asset-spec-input flex-1 rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="Valor">
+            <div class="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(11rem,0.7fr)_auto]" data-repeatable-row data-spec-input-row>
+                <input data-feature-id="${escapeHTML(featureId)}" list="${escapeHTML(getSpecReuseDatalistId(featureId))}" type="${escapeHTML(inputTypeForFeature(type))}" value="${escapeHTML(value)}"
+                    class="asset-spec-input rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="Valor">
+                ${renderSpecReuseSelect(feature)}
                 <button type="button" data-remove-feature-value class="rounded-lg border-2 border-red-600 px-3 py-2 text-xs font-bold uppercase text-red-600 hover:bg-red-50">Remover</button>
             </div>
         `;
@@ -1815,6 +2080,7 @@
         const row = wrapper.firstElementChild;
         row?.querySelector("[data-remove-feature-value]")?.addEventListener("click", () => row.remove());
         container.appendChild(row);
+        hydrateSpecReuseValues([feature]);
     }
 
     function fillAssetSpecs(asset) {
@@ -1822,6 +2088,7 @@
         const byFeatureId = new Map(details.map((detail) => [String(getFeatureId(detail)), detail]));
 
         document.querySelectorAll(".asset-spec-input").forEach((input) => {
+            if (input.closest("[data-structured-feature='true']")) return;
             const featureId = input.dataset.featureId;
             const detail = byFeatureId.get(String(featureId));
             if (!detail) return;
@@ -1839,15 +2106,97 @@
             if (!valuesContainer) return;
             valuesContainer.innerHTML = "";
 
-            const feature = {
+            const categoryFeatures = getCategoryFeaturesSync(getAssetCategoryId(asset));
+            const categoryFeature = categoryFeatures.find((item) => String(getFeatureId(item)) === featureId);
+            const feature = categoryFeature || {
                 feature_id: featureId,
                 feature_name: getFeatureName(detail),
                 feature_type: getFeatureType(detail),
+                field_schema: getFeatureFieldSchema(detail),
                 is_multiple: true,
             };
             const values = Array.isArray(getSpecValue(detail)) ? getSpecValue(detail) : [getSpecValue(detail)];
-            values.forEach((value) => addRepeatableFeatureRow(feature, valueForInput(value)));
+            values.forEach((value) => addRepeatableFeatureRow(feature, hasFeatureFieldSchema(feature) ? value : valueForInput(value)));
         });
+    }
+
+    function resetAssetTemplateSelect() {
+        const block = document.getElementById("assetExistingTemplateBlock");
+        const select = document.getElementById("asset-existing-template-select");
+        if (block) block.classList.add("hidden");
+        if (select) {
+            select.innerHTML = `<option value="">Seleciona uma categoria primeiro...</option>`;
+            select.value = "";
+            select.disabled = true;
+        }
+    }
+
+    function formatAssetTemplateOption(asset) {
+        const pieces = [getAssetSerial(asset) || `INV-${getAssetId(asset)}`, getAssetLocation(asset), getAssetStatus(asset)]
+            .map((value) => String(value || "").trim())
+            .filter(Boolean);
+        return pieces.join(" · ") || `Ativo #${getAssetId(asset)}`;
+    }
+
+    async function getRegisteredAssetsForCategory(categoryId) {
+        const key = String(categoryId || "");
+        if (!key) return [];
+        if (Array.isArray(cacheAtivosRegistadosPorCategoria[key])) return cacheAtivosRegistadosPorCategoria[key];
+
+        const values = await fetchArray(`/assets/categories/${encodeURIComponent(key)}/registered-assets?limit=${ASSET_TEMPLATE_OPTION_LIMIT}`);
+        cacheAtivosRegistadosPorCategoria[key] = values;
+        return values;
+    }
+
+    async function updateAssetTemplateSelect() {
+        const categoryId = getInputValue("asset-category");
+        const editingAssetId = getInputValue("editing-asset-id");
+        const block = document.getElementById("assetExistingTemplateBlock");
+        const select = document.getElementById("asset-existing-template-select");
+
+        if (!block || !select) return;
+        if (!categoryId || editingAssetId) {
+            resetAssetTemplateSelect();
+            return;
+        }
+
+        block.classList.remove("hidden");
+        select.disabled = true;
+        select.innerHTML = `<option value="">A carregar ativos registados...</option>`;
+
+        const assets = await getRegisteredAssetsForCategory(categoryId);
+        if (!assets.length) {
+            select.innerHTML = `<option value="">Sem ativos registados nesta categoria</option>`;
+            select.disabled = true;
+            return;
+        }
+
+        select.innerHTML = `<option value="">Preencher através de um ativo existente...</option>` + assets.map((asset) =>
+            `<option value="${escapeHTML(getAssetId(asset))}">${escapeHTML(formatAssetTemplateOption(asset))}</option>`
+        ).join("");
+        select.disabled = false;
+    }
+
+    async function aplicarAtivoExistenteSelecionado(assetId) {
+        const categoryId = getInputValue("asset-category");
+        if (!categoryId || !assetId) return;
+
+        const assets = await getRegisteredAssetsForCategory(categoryId);
+        const asset = assets.find((item) => String(getAssetId(item)) === String(assetId));
+        if (!asset) {
+            showToast("Ativo existente não encontrado.", true);
+            return;
+        }
+
+        setInputValue("asset-location", getAssetLocationId(asset));
+        setInputValue("asset-state", getAssetStatus(asset));
+        setInputValue("asset-assigned", getAssetAssignedTo(asset) === "-" ? "" : getAssetAssignedTo(asset));
+        setInputValue("asset-last-maintenance", dateInputValue(getAssetLastMaintenance(asset)));
+        setInputValue("asset-maintenance-period", getAssetMaintenancePeriod(asset));
+
+        const features = await getFeaturesForCategory(categoryId);
+        renderAssetSpecsFields(features, asset);
+        showToast("Campos preenchidos com dados existentes. Confirma o número de série antes de guardar.");
     }
 
     async function handleAssetSubmit(event) {
@@ -1900,11 +2249,34 @@
         await reloadData();
     }
 
+    function collectStructuredSpecRow(row) {
+        const value = {};
+        row.querySelectorAll(".asset-structured-spec-input").forEach((input) => {
+            const key = input.dataset.schemaFieldKey;
+            if (!key) return;
+            const inputValue = input.value;
+            if (inputValue === undefined || String(inputValue).trim() === "") return;
+            value[key] = inputValue;
+        });
+        return value;
+    }
+
     function collectAssetSpecs() {
         const specs = {};
         const grouped = new Map();
 
+        document.querySelectorAll("[data-structured-feature='true']").forEach((wrapper) => {
+            const featureId = wrapper.dataset.repeatableFeature;
+            if (!featureId) return;
+            const values = Array.from(wrapper.querySelectorAll("[data-structured-spec-row]"))
+                .map(collectStructuredSpecRow)
+                .filter((value) => Object.keys(value).length > 0);
+            if (!values.length) return;
+            specs[featureId] = wrapper.dataset.isMultiple === "true" ? values : values[0];
+        });
+
         document.querySelectorAll(".asset-spec-input").forEach((input) => {
+            if (input.closest("[data-structured-feature='true']")) return;
             const featureId = input.dataset.featureId;
             if (!featureId) return;
             const value = input.value;
@@ -1977,7 +2349,7 @@
                     return `
                         <div class="rounded-lg bg-white p-3 shadow-sm border border-gray-100">
                             <p class="text-xs font-extrabold uppercase text-blue-900">${escapeHTML(getFeatureName(detail))}</p>
-                            <div class="mt-1 text-sm text-gray-900">${renderSpecValue(value)}</div>
+                            <div class="mt-1 text-sm text-gray-900">${renderSpecValue(value, detail)}</div>
                         </div>
                     `;
                 }).join("");
@@ -2000,7 +2372,19 @@
         const modal = document.getElementById(modalId);
         if (!modal) return;
         modal.classList.remove("hidden");
-        modal.classList.add("flex");
+        modal.classList.add("admin-modal-open", "flex");
+        modal.style.display = "flex";
+        modal.style.position = "fixed";
+        modal.style.top = "0";
+        modal.style.right = "0";
+        modal.style.bottom = "0";
+        modal.style.left = "0";
+        modal.style.zIndex = "1000";
+        modal.style.alignItems = "center";
+        modal.style.justifyContent = "center";
+        modal.style.background = "rgba(0, 0, 0, 0.40)";
+        modal.style.padding = "1rem";
+        modal.style.overflowY = "auto";
         modal.setAttribute("aria-hidden", "false");
     }
 
@@ -2008,7 +2392,8 @@
         const modal = document.getElementById(modalId);
         if (!modal) return;
         modal.classList.add("hidden");
-        modal.classList.remove("flex");
+        modal.classList.remove("admin-modal-open", "flex");
+        modal.style.display = "none";
         modal.setAttribute("aria-hidden", "true");
     }
 
@@ -2231,6 +2616,70 @@
             .trim() || "Característica";
     }
     function getFeatureType(feature) { return firstValue(feature, ["feature_type", "type", "tipo"], "text"); }
+
+    function getFeatureFieldSchema(feature) {
+        const schema = firstValue(feature, ["field_schema", "schema", "fields", "campos"], []);
+        if (Array.isArray(schema)) return schema;
+        if (typeof schema === "string" && schema.trim()) {
+            try {
+                const parsed = JSON.parse(schema);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (error) {
+                return [];
+            }
+        }
+        return [];
+    }
+
+    function hasFeatureFieldSchema(feature) { return getFeatureFieldSchema(feature).length > 0; }
+    function getSchemaFieldKey(field) { return firstValue(field, ["key", "field_key", "id", "name", "nome"], ""); }
+    function getSchemaFieldLabel(field) { return firstValue(field, ["label", "field_label", "name", "nome"], getSchemaFieldKey(field) || "Campo"); }
+    function getSchemaFieldType(field) { return String(firstValue(field, ["type", "field_type", "tipo"], "text") || "text").toLowerCase(); }
+    function getSchemaFieldUnit(field) { return firstValue(field, ["unit", "unidade"], ""); }
+    function isSchemaFieldRequired(field) {
+        const value = firstValue(field, ["required", "obrigatorio"], false);
+        if (typeof value === "boolean") return value;
+        return ["true", "1", "sim", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+    }
+    function getSchemaFieldOptions(field) {
+        const options = firstValue(field, ["options", "opcoes", "choices"], []);
+        if (Array.isArray(options)) return options.map((option) => String(option || "").trim()).filter(Boolean);
+        if (typeof options === "string") return options.split(options.includes("\n") ? "\n" : ",").map((option) => option.trim()).filter(Boolean);
+        return [];
+    }
+
+    function parseSpecStructuredValue(value) {
+        if (value && typeof value === "object" && !Array.isArray(value)) return value;
+        if (typeof value === "string" && value.trim()) {
+            try {
+                const parsed = JSON.parse(value);
+                return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+            } catch (error) {
+                return {};
+            }
+        }
+        return {};
+    }
+
+    function formatStructuredFieldValue(value, field) {
+        if (value === undefined || value === null || String(value).trim() === "") return "";
+        let display = value === true ? "Sim" : value === false ? "Não" : String(value);
+        const unit = getSchemaFieldUnit(field);
+        if (unit && display !== "Sim" && display !== "Não") display = `${display} ${unit}`;
+        return display;
+    }
+
+    function formatStructuredSpecValue(feature, rawValue) {
+        const schema = getFeatureFieldSchema(feature);
+        const values = (Array.isArray(rawValue) ? rawValue : [rawValue])
+            .map(parseSpecStructuredValue)
+            .filter((item) => Object.keys(item).length > 0);
+        return values.map((item) => schema.map((field) => {
+            const formatted = formatStructuredFieldValue(item[getSchemaFieldKey(field)], field);
+            return formatted ? `${getSchemaFieldLabel(field)}: ${formatted}` : "";
+        }).filter(Boolean).join("; ")).filter(Boolean);
+    }
+
     function getFeatureTypeLabel(feature) { return FEATURE_TYPE_LABELS[String(getFeatureType(feature)).toLowerCase()] || getFeatureType(feature) || "Texto"; }
     function isFeatureMultiple(feature) { return Boolean(feature?.is_multiple || feature?.is_repeatable || feature?.multiple); }
 
@@ -2261,7 +2710,13 @@
         return [String(value)];
     }
 
-    function renderSpecValue(value) {
+    function renderSpecValue(value, feature = null) {
+        if (feature && hasFeatureFieldSchema(feature)) {
+            const formatted = formatStructuredSpecValue(feature, value);
+            if (!formatted.length) return `<span class="text-gray-400">-</span>`;
+            return `<ul class="space-y-1">${formatted.map((item) => `<li class="rounded-lg bg-gray-50 px-2 py-1 font-semibold ring-1 ring-gray-100">${escapeHTML(item)}</li>`).join("")}</ul>`;
+        }
+
         if (Array.isArray(value)) {
             if (!value.length) return `<span class="text-gray-400">-</span>`;
             return `<ul class="list-disc pl-5">${value.map((item) => `<li>${escapeHTML(formatSpecPrimitive(item))}</li>`).join("")}</ul>`;

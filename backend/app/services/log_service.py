@@ -78,6 +78,30 @@ NOISY_KEYS = {
     "specs_details",
 }
 
+ROLLBACKABLE_TABLES = {"assets", "categories", "features", "locations", "users"}
+
+
+def get_rollback_status(log: AuditLog) -> tuple[bool, str]:
+    origin = str(log.origin or "")
+    if origin.startswith("rollback:"):
+        return False, "Registo gerado por rollback."
+
+    action = str(log.action or "").upper()
+    if log.table_name not in ROLLBACKABLE_TABLES:
+        return False, "Área sem rollback automático."
+
+    if log.table_name == "users" and action == "INSERT":
+        return False, "Criação de utilizadores não pode ser revertida."
+
+    if action not in {"INSERT", "UPDATE", "DELETE"}:
+        return False, "Ação sem rollback automático."
+    if action in {"UPDATE", "DELETE"} and not log.old_value:
+        return False, "Sem dados anteriores para restaurar."
+    if action == "INSERT" and not log.new_value:
+        return False, "Sem dados novos para reverter."
+
+    return True, "Rollback disponível."
+
 
 def get_all_logs(limit: int = 200) -> list[dict]:
     query = (
@@ -108,6 +132,7 @@ def get_log_by_id(log_id: int) -> dict | None:
 def log_to_dict(log: AuditLog, email: str | None = None) -> dict:
     old_display = build_display_items(log.old_value)
     new_display = build_display_items(log.new_value)
+    can_rollback, rollback_reason = get_rollback_status(log)
 
     return {
         "log_id": log.log_id,
@@ -125,6 +150,9 @@ def log_to_dict(log: AuditLog, email: str | None = None) -> dict:
         "new_value_display": new_display,
         "changes": build_changes(log.old_value, log.new_value),
         "details": build_details(log),
+        "can_rollback": can_rollback,
+        "rollback_reason": rollback_reason,
+        "rollback_label": build_rollback_label(log),
         "created_at": log.created_at.isoformat() if log.created_at else None,
     }
 
@@ -248,6 +276,17 @@ def build_changes(old_value: Any, new_value: Any) -> list[dict]:
         if old_text != new_text:
             changes.append({"label": label, "old": old_text, "new": new_text})
     return changes
+
+
+def build_rollback_label(log: AuditLog) -> str:
+    action = str(log.action or "").upper()
+    if action == "INSERT":
+        return "Reverter criação"
+    if action == "DELETE":
+        return "Restaurar remoção"
+    if action == "UPDATE":
+        return "Repor valor anterior"
+    return "Rollback"
 
 
 def build_details(log: AuditLog) -> str:

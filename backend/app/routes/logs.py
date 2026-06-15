@@ -1,9 +1,9 @@
 from flask import Blueprint, request
 
 from app.security.permissions import Permission
-from app.services import log_service
+from app.services import log_service, rollback_service
 from app.services.scheduler_service import check_maintenance
-from app.utils.decorators import permission_required
+from app.utils.decorators import get_current_user_id, permission_required
 from app.utils.responses import error, success
 
 logs_bp = Blueprint("logs", __name__, url_prefix="/api/logs")
@@ -34,3 +34,12 @@ def get_log(log_id: int):
     if not log:
         return error("Registo de auditoria não encontrado.", status=404)
     return success(data=log)
+
+
+@logs_bp.route("/<int:log_id>/rollback", methods=["POST"])
+@permission_required(Permission.LOGS_READ)
+def rollback_log(log_id: int):
+    ok, message, data = rollback_service.rollback_log(log_id, actor_id=get_current_user_id())
+    if not ok:
+        return error(message, status=400)
+    return success(message=message, data=data)

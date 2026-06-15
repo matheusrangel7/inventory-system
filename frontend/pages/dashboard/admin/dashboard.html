@@ -553,7 +553,7 @@
     </div>
 
     <div id="modalAtivo" data-dashboard-modal class="dashboard-modal fixed inset-0 z-[1000] hidden items-center justify-center overflow-y-auto bg-black/40 p-4">
-        <div class="flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white p-6 shadow-2xl">
+        <div class="flex max-h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white p-6 shadow-2xl">
             <div class="mb-5 flex flex-shrink-0 items-center justify-between">
                 <h2 id="modalAtivoTitulo" class="text-xl font-black text-blue-900">Novo Ativo</h2>
                 <button type="button" onclick="fecharModal('modalAtivo')" class="text-2xl font-bold text-gray-500 hover:text-gray-900">×</button>
@@ -595,14 +595,14 @@
                     <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">Período manutenção (meses)</label>
                     <input id="new-asset-maintenance" type="number" min="1" class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="Opcional">
                 </div>
-                <div class="md:col-span-2 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
-                    <div class="mb-3 flex items-center justify-between gap-3">
+                <div class="asset-specs-panel md:col-span-2 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
+                    <div class="asset-specs-panel-header mb-3 flex items-center justify-between gap-3">
                         <div>
                             <h3 class="text-sm font-black uppercase text-blue-900">Características da Categoria</h3>
                             <p class="text-xs text-gray-500">Seleciona uma categoria para aparecerem os campos certos.</p>
                         </div>
                     </div>
-                    <div id="assetSpecsFields" class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div id="assetSpecsFields" class="asset-specs-grid grid grid-cols-1 gap-3 md:grid-cols-2">
                         <p class="md:col-span-2 text-sm text-gray-500">Ainda não selecionaste nenhuma categoria.</p>
                     </div>
                 </div>
@@ -636,7 +636,7 @@
             <div class="mb-5 flex flex-shrink-0 items-center justify-between gap-3">
                 <div>
                     <h2 class="text-xl font-black text-blue-900">Detalhe do Registo</h2>
-                    <p class="text-xs text-gray-500">Consulta das alterações em formato legível, sem depender de JSON técnico.</p>
+                    <p class="text-xs text-gray-500">Consulta das alterações.</p>
                 </div>
                 <button type="button" onclick="fecharModal('modalDetalheRegisto')" class="text-2xl font-bold text-gray-500 hover:text-gray-900">×</button>
             </div>

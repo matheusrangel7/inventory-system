@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS features (
     feature_id SERIAL PRIMARY KEY,
     feature_name VARCHAR(50) NOT NULL,
     feature_type feature_type_enum NOT NULL DEFAULT 'text',
+    field_schema JSONB NOT NULL DEFAULT '[]'::jsonb,
     category_id INTEGER NOT NULL,
     is_multiple BOOLEAN NOT NULL DEFAULT FALSE,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
