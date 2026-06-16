@@ -52,9 +52,10 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      NGINX_HSTS_VALUE: "${NGINX_HSTS_VALUE:-max-age=0}"
     volumes:
       - ./frontend:/usr/share/nginx/html:ro
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
 
   mailhog:
