@@ -401,11 +401,7 @@ def _normalize_single_feature_value(feature: Feature, raw_value: Any) -> tuple[A
 
 
 def _normalize_feature_value(feature: Feature, raw_value: Any) -> tuple[Any | None, str | None]:
-    """Normaliza specs para JSONB.
-
-    - Sem field_schema: mantém o comportamento antigo, com valor escalar ou lista.
-    - Com field_schema: guarda objetos JSON com os campos definidos pelo administrador.
-    """
+    # normalização de specs para jsonb
     is_multiple = bool(getattr(feature, "is_multiple", False))
     is_structured = _is_structured_feature(feature)
 

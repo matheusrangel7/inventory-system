@@ -1,4 +1,4 @@
-/*Lógica e restrições da página de administrador*/
+/*Lógica e restrições da página de gestor*/
 (function () {
     const views = [
         { id: "inicio", title: "PÁGINA INICIAL" },
@@ -9,6 +9,9 @@
     ];
 
     const TABLE_PAGE_SIZE = 10;
+    const GESTOR_ROLLBACKABLE_LOG_TABLES = new Set(["assets"]);
+    const GESTOR_ROLLBACK_SCOPE_REASON = "Gestores só podem reverter registos de ativos das suas salas.";
+    const GESTOR_ROLLBACK_INSERT_REASON = "Gestores não podem reverter criação de ativos.";
     const ASSET_STATES = ["Bom Estado", "Necessita Manutenção", "Avariado", "Para Abate"];
     const FEATURE_TYPE_LABELS = {
         text: "Texto",
@@ -111,7 +114,6 @@
             abrirModalAtivoGestor,
             abrirDetalheAtivoGestor,
             fecharModalGestor,
-            rollbackRegisto,
             verDetalheRegisto,
         });
     }
@@ -269,7 +271,13 @@
         cacheAtivos = assets;
         cacheLocais = locations.length ? locations : deriveLocationsFromAssets(cacheAtivos);
         cacheCategorias = categories.length ? categories : deriveCategoriesFromAssets(cacheAtivos);
-        cacheRegistos = logs;
+        cacheRegistos = logs
+            .filter((log) => getLogTable(log) === "assets")
+            .map((log) => ({
+                ...log,
+                table_name: "assets",
+                table_label: "Ativos",
+            }));
         cacheFeaturesPorCategoria = {};
 
         cacheCategorias.forEach((category) => {
@@ -1253,15 +1261,12 @@
             };
 
         return [
-            { key: "id", label: "ID", required: true, header: headers.id, tdClass: "px-4 py-3", render: (asset) => `#${escapeHTML(getAssetId(asset))}` },
-            { key: "asset", label: "Ativo / código", header: headers.asset, tdClass: "px-4 py-3 font-black text-blue-900", render: (asset) => escapeHTML(getAssetSerial(asset) || `INV-${getAssetId(asset)}`) },
-            { key: "category", label: "Categoria / tipo", required: true, header: headers.category, tdClass: "px-4 py-3", render: (asset) => `
-                <div class="font-bold text-gray-900">${escapeHTML(getAssetCategoryName(asset))}</div>
-                <div class="mt-1 text-xs text-gray-500">${getAssetSpecsDetails(asset).length} característica${getAssetSpecsDetails(asset).length === 1 ? "" : "s"}</div>
-            ` },
-            { key: "location", label: "Sala / local", header: headers.location, tdClass: "px-4 py-3", render: (asset) => escapeHTML(getAssetLocationName(asset)) },
+            { key: "id", label: "ID", required: true, header: headers.id, tdClass: "px-4 py-3", render: renderAssetIdCell },
+            { key: "asset", label: "Ativo / código", header: headers.asset, tdClass: "px-4 py-3", render: renderAssetIdentityCell },
+            { key: "category", label: "Categoria / tipo", required: true, header: headers.category, tdClass: "px-4 py-3", render: renderAssetCategoryCell },
+            { key: "location", label: "Sala / local", header: headers.location, tdClass: "px-4 py-3", render: renderAssetLocationCell },
             { key: "status", label: "Estado", header: headers.status, tdClass: "px-4 py-3", render: (asset) => statusBadge(getAssetStatus(asset)) },
-            { key: "assignment", label: "Atribuição", header: headers.assignment, tdClass: "px-4 py-3", render: (asset) => escapeHTML(getAssetAssignedTo(asset)) },
+            { key: "assignment", label: "Atribuição", header: headers.assignment, tdClass: "px-4 py-3", render: renderAssetAssignmentCell },
             { key: "registration", label: "Data de registo", header: headers.registration, tdClass: "px-4 py-3 whitespace-nowrap", render: (asset) => escapeHTML(formatDate(getAssetRegisteredAt(asset))) },
         ];
     }
@@ -1484,15 +1489,59 @@
         const specs = asset && asset.specs && typeof asset.specs === "object" ? asset.specs : {};
         const key = Object.keys(specs).find((item) =>
             String(item) === featureId ||
-            normalize(item) === normalize(getFeatureName(feature))
+            normalize(item) === normalize(getFeatureName(feature)) ||
+            normalize(item) === normalize(getFeatureRawName(feature))
         );
         return key ? specs[key] : "";
     }
 
+    function formatStructuredSpecValueForTable(feature, rawValue) {
+        const schema = getFeatureFieldSchema(feature);
+        const values = decodeSpecValue(rawValue)
+            .map(parseSpecStructuredValue)
+            .filter((item) => Object.keys(item).length > 0);
+
+        if (!values.length) {
+            return `<span class="text-xs font-semibold text-gray-400">—</span>`;
+        }
+
+        const visibleValues = values.slice(0, 2);
+        const remainingCount = values.length - visibleValues.length;
+
+        return `
+            <div class="min-w-64 max-w-[28rem] space-y-1.5">
+                ${visibleValues.map((item, index) => {
+                    const fields = schema.map((field) => {
+                        const formatted = formatStructuredFieldValue(item[getSchemaFieldKey(field)], field);
+                        if (!formatted) return "";
+                        return `
+                            <span class="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-gray-800 ring-1 ring-gray-200">
+                                <strong class="text-blue-900">${escapeHTML(getSchemaFieldLabel(field))}:</strong>
+                                ${escapeHTML(formatted)}
+                            </span>
+                        `;
+                    }).filter(Boolean).join("");
+
+                    return `
+                        <div class="rounded-xl border border-blue-100 bg-blue-50/40 p-2" title="${escapeHTML(formatStructuredSpecValue(feature, item)[0] || "")}">
+                            ${values.length > 1 ? `<div class="mb-1 text-[10px] font-black uppercase tracking-wide text-blue-900">Valor ${index + 1}</div>` : ""}
+                            <div class="flex flex-wrap gap-1">${fields || `<span class="text-xs font-semibold text-gray-400">—</span>`}</div>
+                        </div>
+                    `;
+                }).join("")}
+                ${remainingCount > 0 ? `<span class="inline-flex rounded-full bg-blue-900 px-2.5 py-1 text-[11px] font-black text-white">+${remainingCount} valor${remainingCount === 1 ? "" : "es"}</span>` : ""}
+            </div>
+        `;
+    }
+
     function formatSpecValueForTable(value, feature = null) {
-        const values = feature && hasFeatureFieldSchema(feature)
-            ? formatStructuredSpecValue(feature, value)
-            : flattenValue(value).filter((item) => String(item).trim() !== "").map(formatSpecPrimitive);
+        if (feature && hasFeatureFieldSchema(feature)) {
+            return formatStructuredSpecValueForTable(feature, value);
+        }
+
+        const values = decodeSpecValue(value)
+            .filter((item) => item !== undefined && item !== null && String(item).trim() !== "")
+            .map(formatSpecPrimitive);
 
         if (!values.length) return `<span class="text-xs font-semibold text-gray-400">—</span>`;
         if (values.length === 1) {
@@ -1505,6 +1554,55 @@
             <div class="flex max-w-64 flex-wrap gap-1">
                 ${visible.map((item) => `<span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-800" title="${escapeHTML(item)}">${escapeHTML(item)}</span>`).join("")}
                 ${remaining > 0 ? `<span class="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-900">+${remaining}</span>` : ""}
+            </div>
+        `;
+    }
+
+    function renderAssetIdCell(asset) {
+        return `
+            <div class="min-w-20">
+                <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-black text-gray-800 ring-1 ring-gray-200">#${escapeHTML(getAssetId(asset))}</span>
+            </div>
+        `;
+    }
+
+    function renderAssetIdentityCell(asset) {
+        return `
+            <div class="min-w-44">
+                <div class="font-black text-blue-900">${escapeHTML(getAssetCode(asset))}</div>
+                <div class="mt-0.5 text-xs text-gray-500">Identificação do ativo</div>
+            </div>
+        `;
+    }
+
+    function renderAssetCategoryCell(asset) {
+        const detailsCount = getAssetSpecsDetails(asset).length;
+        return `
+            <div class="min-w-40">
+                <div class="font-bold text-gray-900">${escapeHTML(getAssetCategoryName(asset))}</div>
+                <div class="mt-1 text-xs text-gray-500">${detailsCount} característica${detailsCount === 1 ? "" : "s"} preenchida${detailsCount === 1 ? "" : "s"}</div>
+            </div>
+        `;
+    }
+
+    function renderAssetLocationCell(asset) {
+        return `
+            <div class="min-w-36">
+                <div class="font-semibold text-gray-900">${escapeHTML(getAssetLocationName(asset))}</div>
+                <div class="text-xs text-gray-500">Local #${escapeHTML(getAssetLocationId(asset) || "-")}</div>
+            </div>
+        `;
+    }
+
+    function renderAssetAssignmentCell(asset) {
+        const assigned = getAssetAssignedTo(asset);
+        const isAssigned = assigned && assigned !== "-";
+        return `
+            <div class="min-w-40">
+                <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${isAssigned ? "bg-blue-50 text-blue-900 ring-1 ring-blue-100" : "bg-gray-100 text-gray-500"}">
+                    ${escapeHTML(isAssigned ? assigned : "Sem atribuição")}
+                </span>
+                ${isAssigned ? `<div class="mt-1 text-xs text-gray-500">${escapeHTML(formatDate(getAssetAssignedAt(asset)))}</div>` : ""}
             </div>
         `;
     }
@@ -1735,7 +1833,9 @@
     }
 
     function isAuditKeyHidden(key) {
-        return ["specs_details", "totp_secret", "password_hash", "registration_token_hash", "mfa_recovery_code_hash"].includes(String(key || ""));
+        const normalizedKey = String(key || "");
+        return normalizedKey.startsWith("_rollback_") ||
+            ["specs_details", "totp_secret", "password_hash", "registration_token_hash", "mfa_recovery_code_hash"].includes(normalizedKey);
     }
 
     function humanizeAuditKey(key) {
@@ -1848,7 +1948,7 @@
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <h3 class="text-sm font-black uppercase text-red-800">Reversão disponível</h3>
-                            <p class="mt-1 text-xs font-semibold text-red-700">${escapeHTML(getLogRollbackLabel(log))}. Depois de executado, este registo deixa de poder ser revertido novamente.</p>
+                            <p class="mt-1 text-xs font-semibold text-red-700">${escapeHTML(getLogRollbackLabel(log))}. A reversão só é permitida para ativos que continuam dentro das tuas salas e cria um novo registo de auditoria.</p>
                         </div>
                         <button type="button" class="rounded-lg border-2 border-red-700 bg-white px-4 py-2 text-sm font-black uppercase text-red-700 hover:bg-red-100" data-log-action="rollback" data-log-id="${escapeHTML(getLogId(log))}">Executar Reversão</button>
                     </div>
@@ -1879,7 +1979,7 @@
                     ${detailCard("Data/hora", formatDate(getLogDate(log)))}
                     ${detailCard("Utilizador", getLogUser(log))}
                     ${detailCard("Ação", getLogActionLabel(log))}
-                    ${detailCard("Área", getLogTableLabel(log))}
+                    ${detailCard("Área", "Ativos")}
                     ${detailCard("Registo afetado", getLogRecordLabel(log))}
                     ${detailCard("Origem", getLogOriginLabel(log))}
                 </div>
@@ -1891,11 +1991,11 @@
             <section class="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
                     <h3 class="mb-3 text-sm font-black uppercase text-blue-900">Antes</h3>
-                    ${renderAuditItemList(oldItems, "Sem valor anterior. Normalmente acontece quando o registo foi criado.")}
+                    ${renderAuditItemList(oldItems, "Sem valor anterior. Normalmente acontece quando o ativo foi criado.")}
                 </div>
                 <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
                     <h3 class="mb-3 text-sm font-black uppercase text-blue-900">Depois</h3>
-                    ${renderAuditItemList(newItems, "Sem valor novo. Normalmente acontece quando o registo foi removido.")}
+                    ${renderAuditItemList(newItems, "Sem valor novo. Normalmente acontece quando o ativo foi removido.")}
                 </div>
             </section>
         `;
@@ -1904,9 +2004,15 @@
     async function rollbackRegisto(logId) {
         const log = findLog(logId);
         const label = log ? `${getLogRollbackLabel(log)} em ${getLogTableLabel(log)} #${getLogRecordId(log)}` : `Rollback do registo #${logId}`;
+
+        if (log && !canRollbackLog(log)) {
+            showToast(getLogRollbackReason(log), true);
+            return;
+        }
+
         if (!confirm(`${label}. Tens a certeza?`)) return;
 
-        const result = await api.post(`/logs/${encodeURIComponent(logId)}/rollback`, {});
+        const result = await api.post(`/logs/${logId}/rollback`, {});
         if (!result.success) {
             showToast(result.error || result.message || "Não foi possível executar o rollback.", true);
             return;
@@ -1919,11 +2025,18 @@
 
     async function verDetalheRegisto(logId) {
         let log = findLog(logId);
-        const result = await api.get(`/logs/${encodeURIComponent(logId)}`);
-        if (result.success && result.data) log = result.data;
+
+        const result = await api.get(`/logs/${logId}`);
+        if (result.success && result.data) {
+            log = result.data;
+            const index = cacheRegistos.findIndex((item) => String(getLogId(item)) === String(logId));
+            if (index >= 0) {
+                cacheRegistos[index] = { ...cacheRegistos[index], ...log, table_name: "assets", table_label: "Ativos" };
+            }
+        }
 
         if (!log) {
-            showToast("Registo não encontrado.", true);
+            showToast(result.error || result.message || "Registo não encontrado.", true);
             return;
         }
 
@@ -2073,10 +2186,10 @@
         if (serialInput) {
             serialInput.disabled = !!asset;
             serialInput.classList.toggle("bg-gray-100", !!asset);
+            serialInput.classList.toggle("cursor-not-allowed", !!asset);
         }
         serialHint?.classList.toggle("hidden", !asset);
 
-        renderAssetSpecsFields([]);
         resetAssetTemplateSelect();
 
         if (asset) {
@@ -2088,15 +2201,31 @@
             setInputValue("asset-last-maintenance", dateInputValue(getAssetLastMaintenance(asset)));
             setInputValue("asset-maintenance-period", getAssetMaintenancePeriod(asset));
             atualizarCamposSpecsDoAtivo(asset);
+        } else {
+            resetAssetCreateModalValues();
         }
 
         abrirModalGestor("modalAtivoGestor");
     }
 
+    function resetAssetCreateModalValues() {
+        setInputValue("editing-asset-id", "");
+        setInputValue("asset-serial", "");
+        setInputValue("asset-category", "");
+        setInputValue("asset-location", "");
+        setInputValue("asset-state", "Bom Estado");
+        setInputValue("asset-assigned", "");
+        setInputValue("asset-last-maintenance", "");
+        setInputValue("asset-maintenance-period", "");
+        renderAssetSpecsPlaceholder("Seleciona uma categoria para aparecerem os campos certos.");
+        resetAssetTemplateSelect();
+    }
+
     async function atualizarCamposSpecsDoAtivo(asset = null) {
         const categoryId = getInputValue("asset-category");
         if (!categoryId) {
-            renderAssetSpecsFields([]);
+            renderAssetSpecsPlaceholder("Seleciona uma categoria para aparecerem os campos certos.");
+            resetAssetTemplateSelect();
             return;
         }
         const features = await getFeaturesForCategory(categoryId);
@@ -2140,10 +2269,13 @@
     function renderSpecReuseSelect(feature) {
         if (String(getFeatureType(feature)).toLowerCase() === "boolean") return "";
         return `
-            <select data-spec-existing-select data-feature-id="${escapeHTML(getFeatureId(feature))}"
-                class="asset-spec-existing-select mt-2 w-full rounded-lg border-2 border-blue-900 bg-white px-3 py-2 text-xs font-bold text-blue-900 outline-none focus:ring-2 focus:ring-blue-900/20" disabled>
-                <option value="">Valores registados...</option>
-            </select>
+            <label class="min-w-0 flex-1">
+                <span class="mb-1 block text-[11px] font-black uppercase text-blue-900">Usar dados já registados</span>
+                <select data-spec-existing-select data-feature-id="${escapeHTML(getFeatureId(feature))}"
+                    class="asset-spec-existing-select min-h-10 w-full rounded-lg border-2 border-blue-900 bg-white px-3 py-2 text-xs font-bold text-blue-900 outline-none focus:ring-2 focus:ring-blue-900/20" disabled>
+                    <option value="">Valores registados...</option>
+                </select>
+            </label>
         `;
     }
 
@@ -2270,12 +2402,18 @@
         input.dispatchEvent(new Event("input", { bubbles: true }));
     }
 
+    function renderAssetSpecsPlaceholder(message) {
+        const container = document.getElementById("assetSpecsFields");
+        if (!container) return;
+        container.innerHTML = `<p class="md:col-span-2 text-sm text-gray-500">${escapeHTML(message)}</p>`;
+    }
+
     function renderAssetSpecsFields(features, asset = null) {
         const container = document.getElementById("assetSpecsFields");
         if (!container) return;
 
         if (!features.length) {
-            container.innerHTML = `<p class="md:col-span-2 text-sm text-gray-500">Esta categoria ainda não tem características associadas.</p>`;
+            renderAssetSpecsPlaceholder("Esta categoria ainda não tem características associadas.");
             return;
         }
 
@@ -2347,18 +2485,32 @@
         `;
     }
 
-    function renderStructuredFeatureRow(feature, value = "") {
+    function renderStructuredFeatureRow(feature, value = "", allowRemove = true) {
         const schema = getFeatureFieldSchema(feature);
         const structuredValue = parseSpecStructuredValue(value);
         return `
-            <div class="asset-spec-value-row asset-structured-spec-row rounded-xl border border-blue-100 bg-blue-50/30 p-3" data-repeatable-row data-spec-input-row data-structured-spec-row>
+            <div class="asset-spec-value-row asset-structured-spec-row rounded-2xl border border-blue-100 bg-blue-50/30 p-3 shadow-sm" data-repeatable-row data-spec-input-row data-structured-spec-row>
                 <div class="asset-structured-fields-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                     ${schema.map((field) => renderSchemaFieldControl(feature, field, structuredValue[getSchemaFieldKey(field)])).join("")}
                 </div>
-                <div class="asset-structured-actions mt-3 flex flex-wrap items-center gap-2">
+                <div class="asset-structured-actions mt-3 grid grid-cols-1 items-end gap-2 lg:grid-cols-[minmax(0,1fr)_auto]">
                     ${renderSpecReuseSelect(feature)}
-                    <button type="button" data-remove-feature-value class="rounded-lg border-2 border-red-600 px-3 py-2 text-xs font-bold uppercase text-red-600 hover:bg-red-50">Remover</button>
+                    ${allowRemove ? `<button type="button" data-remove-feature-value class="rounded-lg border-2 border-red-600 px-3 py-2 text-xs font-bold uppercase text-red-600 hover:bg-red-50">Remover</button>` : ""}
                 </div>
+            </div>
+        `;
+    }
+
+    function renderFeatureSchemaPreview(feature) {
+        const schema = getFeatureFieldSchema(feature);
+        if (!schema.length) return "";
+        return `
+            <div class="mt-2 flex flex-wrap gap-1">
+                ${schema.map((field) => `
+                    <span class="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-900 ring-1 ring-blue-100">
+                        ${escapeHTML(getSchemaFieldLabel(field))}${getSchemaFieldUnit(field) ? ` (${escapeHTML(getSchemaFieldUnit(field))})` : ""}${isSchemaFieldRequired(field) ? " *" : ""}
+                    </span>
+                `).join("")}
             </div>
         `;
     }
@@ -2372,15 +2524,19 @@
         if (hasFeatureFieldSchema(feature)) {
             return `
                 <div class="asset-spec-feature-card md:col-span-2 rounded-lg border border-blue-100 bg-white p-3" data-repeatable-feature="${escapeHTML(featureId)}" data-feature-type="${escapeHTML(type)}" data-structured-feature="true" data-is-multiple="${isMultiple ? "true" : "false"}">
-                    <div class="asset-spec-feature-header mb-2 flex items-center justify-between gap-3">
-                        <div>
+                    <div class="asset-spec-feature-header mb-3 flex flex-wrap items-start justify-between gap-3">
+                        <div class="min-w-0">
                             <label class="block text-xs font-extrabold uppercase text-blue-900">${escapeHTML(name)}</label>
-                            <p class="mt-1 text-[11px] font-semibold text-gray-500">Campos definidos pelo administrador. Preenche neste formato para todos usarem o mesmo padrão.</p>
+                            <div class="mt-1 flex flex-wrap gap-1">
+                                <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-bold text-gray-700">Estruturada</span>
+                                ${isMultiple ? `<span class="rounded-full bg-blue-900 px-2 py-0.5 text-[11px] font-bold text-white">Múltipla</span>` : ""}
+                            </div>
+                            ${renderFeatureSchemaPreview(feature)}
                         </div>
-                        ${isMultiple ? `<button type="button" data-add-feature-value="${escapeHTML(featureId)}" class="rounded-md border-2 border-blue-900 bg-white px-2 py-1 text-xs font-bold uppercase text-blue-900 hover:bg-gray-100">+ Valor</button>` : ""}
+                        ${isMultiple ? `<button type="button" data-add-feature-value="${escapeHTML(featureId)}" class="rounded-lg border-2 border-blue-900 bg-white px-3 py-2 text-xs font-bold uppercase text-blue-900 hover:bg-gray-100">+ Valor</button>` : ""}
                     </div>
                     <div class="space-y-2" data-repeatable-values="${escapeHTML(featureId)}">
-                        ${renderStructuredFeatureRow(feature)}
+                        ${renderStructuredFeatureRow(feature, "", isMultiple)}
                     </div>
                 </div>
             `;
@@ -2389,16 +2545,21 @@
         if (isMultiple) {
             return `
                 <div class="asset-spec-feature-card md:col-span-2 rounded-lg border border-blue-100 bg-white p-3" data-repeatable-feature="${escapeHTML(featureId)}" data-feature-type="${escapeHTML(type)}">
-                    <div class="asset-spec-feature-header mb-2 flex items-center justify-between gap-3">
-                        <label class="block text-xs font-extrabold uppercase text-blue-900">${escapeHTML(name)}</label>
+                    <div class="asset-spec-feature-header mb-3 flex flex-wrap items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <label class="block text-xs font-extrabold uppercase text-blue-900">${escapeHTML(name)}</label>
+                            <div class="mt-1 flex flex-wrap gap-1">
+                                <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-bold text-gray-700">${escapeHTML(FEATURE_TYPE_LABELS[type] || "Texto")}</span>
+                                <span class="rounded-full bg-blue-900 px-2 py-0.5 text-[11px] font-bold text-white">Múltipla</span>
+                            </div>
+                        </div>
                         <button type="button" data-add-feature-value="${escapeHTML(featureId)}"
-                            class="rounded-md border-2 border-blue-900 bg-white px-2 py-1 text-xs font-bold uppercase text-blue-900 hover:bg-gray-100">+ Valor</button>
+                            class="rounded-lg border-2 border-blue-900 bg-white px-3 py-2 text-xs font-bold uppercase text-blue-900 hover:bg-gray-100">+ Valor</button>
                     </div>
                     <div class="space-y-2" data-repeatable-values="${escapeHTML(featureId)}">
                         ${renderRepeatableFeatureRow(feature)}
                     </div>
                     ${type !== "boolean" ? `<datalist id="${escapeHTML(getSpecReuseDatalistId(featureId))}" data-spec-values-list></datalist>` : ""}
-                    <p class="mt-2 text-[11px] font-semibold text-gray-500">Ao escolher um valor existente, ele é copiado para este ativo, sem associação ao ativo antigo.</p>
                 </div>
             `;
         }
@@ -2423,7 +2584,6 @@
                     class="asset-spec-input w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="Valor">
                 ${renderSpecReuseSelect(feature)}
                 <datalist id="${escapeHTML(getSpecReuseDatalistId(featureId))}" data-spec-values-list></datalist>
-                <p class="mt-1 text-[11px] font-semibold text-gray-500">Podes escolher um valor já registado ou escrever um novo.</p>
             </div>
         `;
     }
@@ -2450,9 +2610,11 @@
         }
 
         return `
-            <div class="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(11rem,0.7fr)_auto]" data-repeatable-row data-spec-input-row>
-                <input data-feature-id="${escapeHTML(featureId)}" list="${escapeHTML(getSpecReuseDatalistId(featureId))}" type="${escapeHTML(inputTypeForFeature(type))}" value="${escapeHTML(value)}"
-                    class="asset-spec-input rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="Valor">
+            <div class="grid grid-cols-1 items-end gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(11rem,0.7fr)_auto]" data-repeatable-row data-spec-input-row>
+                <div class="min-w-0">
+                    <input data-feature-id="${escapeHTML(featureId)}" list="${escapeHTML(getSpecReuseDatalistId(featureId))}" type="${escapeHTML(inputTypeForFeature(type))}" value="${escapeHTML(value)}"
+                        class="asset-spec-input w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20" placeholder="Valor">
+                </div>
                 ${renderSpecReuseSelect(feature)}
                 <button type="button" data-remove-feature-value class="rounded-lg border-2 border-red-600 px-3 py-2 text-xs font-bold uppercase text-red-600 hover:bg-red-50">Remover</button>
             </div>
@@ -2700,7 +2862,7 @@
         await reloadData();
     }
 
-    function abrirDetalheAtivoGestor(assetId) {
+    async function abrirDetalheAtivoGestor(assetId) {
         const asset = findAsset(assetId);
         if (!asset) {
             showToast("Ativo não encontrado.", true);
@@ -2708,49 +2870,197 @@
         }
 
         assetBeingViewedId = getAssetId(asset);
-        const summary = document.getElementById("assetDetailSummary");
-        const specs = document.getElementById("assetDetailSpecs");
 
-        if (summary) {
-            summary.innerHTML = [
-                detailCard("ID", `#${getAssetId(asset)}`),
-                detailCard("Nº Série", getAssetSerial(asset)),
-                detailCard("Categoria", getAssetCategoryName(asset)),
-                detailCard("Local", getAssetLocationName(asset)),
-                detailCard("Estado", getAssetStatus(asset), true),
-                detailCard("Atribuído a", getAssetAssignedTo(asset)),
-                detailCard("Data de atribuição", formatDate(getAssetAssignedAt(asset))),
-                detailCard("Registo", formatDate(getAssetRegisteredAt(asset))),
-                detailCard("Última manutenção", formatDate(getAssetLastMaintenance(asset), false)),
-                detailCard("Período manutenção", getAssetMaintenancePeriod(asset) ? `${getAssetMaintenancePeriod(asset)} meses` : "-"),
-            ].join("");
+        try {
+            const categoryId = getAssetCategoryId(asset);
+            if (categoryId) await getFeaturesForCategory(categoryId);
+        } catch (error) {
+            console.warn("[Gestor] Não foi possível carregar as características da categoria para o detalhe.", error);
         }
 
-        if (specs) {
-            const details = getAssetSpecsDetails(asset);
-            if (!details.length) {
-                specs.innerHTML = `<p class="md:col-span-2 text-sm text-gray-500">Este ativo ainda não tem características registadas.</p>`;
-            } else {
-                specs.innerHTML = details.map((detail) => {
-                    const value = getSpecValue(detail);
-                    return `
-                        <div class="rounded-lg bg-white p-3 shadow-sm border border-gray-100">
-                            <p class="text-xs font-extrabold uppercase text-blue-900">${escapeHTML(getFeatureName(detail))}</p>
-                            <div class="mt-1 text-sm text-gray-900">${renderSpecValue(value, detail)}</div>
-                        </div>
-                    `;
-                }).join("");
-            }
-        }
-
+        renderAssetDetail(asset);
         abrirModalGestor("modalDetalheAtivo");
+    }
+
+    function renderDetailField(label, value) {
+        return `
+            <div class="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <p class="text-xs font-extrabold uppercase text-blue-900">${escapeHTML(label)}</p>
+                <p class="mt-1 break-words text-sm font-semibold text-gray-900">${escapeHTML(displayValueOrNA(value))}</p>
+            </div>
+        `;
     }
 
     function detailCard(label, value, badge = false) {
         return `
             <div class="rounded-xl border border-gray-100 bg-gray-50 p-3">
                 <p class="text-xs font-extrabold uppercase text-blue-900">${escapeHTML(label)}</p>
-                <div class="mt-1 text-sm font-bold text-gray-900">${badge ? statusBadge(value) : escapeHTML(value || "-")}</div>
+                <div class="mt-1 text-sm font-bold text-gray-900">${badge ? statusBadge(value) : escapeHTML(displayValueOrNA(value))}</div>
+            </div>
+        `;
+    }
+
+    function renderAssetDetail(asset) {
+        const content = document.getElementById("assetDetailContent");
+        const summary = document.getElementById("assetDetailSummary");
+        const specs = document.getElementById("assetDetailSpecs");
+
+        const html = `
+            <section>
+                <h3 class="mb-3 text-sm font-black uppercase text-blue-900">Dados principais</h3>
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    ${renderDetailField("Código interno", getAssetCode(asset))}
+                    ${renderDetailField("ID técnico", `#${getAssetId(asset)}`)}
+                    ${renderDetailField("Categoria", getAssetCategoryName(asset))}
+                    ${renderDetailField("Local", getAssetLocationName(asset))}
+                    ${renderDetailField("Estado", getAssetStatus(asset))}
+                    ${renderDetailField("Atribuído a", getAssetAssignedTo(asset))}
+                    ${renderDetailField("Data de atribuição", formatDate(getAssetAssignedAt(asset)))}
+                    ${renderDetailField("Data de registo", formatDate(getAssetRegisteredAt(asset)))}
+                    ${renderDetailField("Última manutenção", formatDate(getAssetLastMaintenance(asset), false))}
+                    ${renderDetailField("Período manutenção", getAssetMaintenancePeriod(asset) ? `${getAssetMaintenancePeriod(asset)} meses` : "")}
+                </div>
+            </section>
+            <section>
+                <h3 class="mb-3 text-sm font-black uppercase text-blue-900">Características</h3>
+                ${renderAssetSpecsDetail(asset)}
+            </section>
+        `;
+
+        if (content) {
+            content.innerHTML = html;
+            return;
+        }
+
+        if (summary) {
+            summary.innerHTML = [
+                renderDetailField("Código interno", getAssetCode(asset)),
+                renderDetailField("ID técnico", `#${getAssetId(asset)}`),
+                renderDetailField("Categoria", getAssetCategoryName(asset)),
+                renderDetailField("Local", getAssetLocationName(asset)),
+                renderDetailField("Estado", getAssetStatus(asset)),
+                renderDetailField("Atribuído a", getAssetAssignedTo(asset)),
+                renderDetailField("Data de atribuição", formatDate(getAssetAssignedAt(asset))),
+                renderDetailField("Data de registo", formatDate(getAssetRegisteredAt(asset))),
+                renderDetailField("Última manutenção", formatDate(getAssetLastMaintenance(asset), false)),
+                renderDetailField("Período manutenção", getAssetMaintenancePeriod(asset) ? `${getAssetMaintenancePeriod(asset)} meses` : ""),
+            ].join("");
+        }
+
+        if (specs) specs.innerHTML = renderAssetSpecsDetail(asset);
+    }
+
+    function renderAssetSpecsDetail(asset) {
+        const details = getAssetSpecsDetails(asset);
+        const activeFeatures = getCategoryFeaturesSync(getAssetCategoryId(asset));
+        const specsByFeatureId = {};
+        const featureMap = new Map();
+
+        activeFeatures.forEach((feature) => {
+            const featureId = String(getFeatureId(feature));
+            if (featureId) featureMap.set(featureId, feature);
+        });
+
+        details.forEach((detail) => {
+            const featureId = String(getFeatureId(detail));
+            if (!featureId) return;
+            specsByFeatureId[featureId] = getSpecValue(detail);
+
+            if (!featureMap.has(featureId)) {
+                featureMap.set(featureId, {
+                    feature_id: featureId,
+                    feature_name: getFeatureName(detail),
+                    feature_type: getFeatureType(detail),
+                    field_schema: getFeatureFieldSchema(detail),
+                    has_field_schema: hasFeatureFieldSchema(detail),
+                    is_multiple: isFeatureMultiple(detail),
+                    is_repeatable: isFeatureMultiple(detail),
+                    feature_is_active: isFeatureActive(detail),
+                    is_active: isFeatureActive(detail),
+                });
+            }
+        });
+
+        const specs = asset && asset.specs && typeof asset.specs === "object" ? asset.specs : {};
+        Object.entries(specs).forEach(([key, value]) => {
+            const feature = Array.from(featureMap.values()).find((item) =>
+                String(getFeatureName(item)) === String(key) ||
+                String(getFeatureRawName(item)) === String(key) ||
+                String(getFeatureId(item)) === String(key)
+            );
+            if (feature) specsByFeatureId[String(getFeatureId(feature))] = value;
+        });
+
+        const features = Array.from(featureMap.values());
+        if (!features.length) {
+            return `<p class="text-sm text-gray-500">Este ativo não tem características registadas.</p>`;
+        }
+
+        return `
+            <div class="grid grid-cols-1 gap-3">
+                ${features.map((feature) => {
+                    const featureId = String(getFeatureId(feature));
+                    const rawValue = Object.prototype.hasOwnProperty.call(specsByFeatureId, featureId) ? specsByFeatureId[featureId] : "";
+                    const structured = hasFeatureFieldSchema(feature);
+                    return `
+                        <div class="rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
+                            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <p class="text-xs font-black uppercase tracking-wide text-blue-900">${escapeHTML(getFeatureName(feature))}</p>
+                                    <p class="mt-0.5 text-[11px] font-semibold text-gray-500">${structured ? "" : escapeHTML(getFeatureTypeLabel(feature))}</p>
+                                </div>
+                            </div>
+                            ${formatSpecValueForDetail(feature, rawValue)}
+                        </div>
+                    `;
+                }).join("")}
+            </div>
+        `;
+    }
+
+    function formatSpecValueForDetail(feature, rawValue) {
+        if (hasFeatureFieldSchema(feature)) {
+            return renderStructuredSpecValueForDetail(feature, rawValue);
+        }
+
+        const values = decodeSpecValue(rawValue).filter((value) => value !== undefined && value !== null && String(value).trim() !== "");
+        if (!values.length) return `<span class="inline-flex rounded-lg bg-white px-2 py-1 text-sm font-semibold text-gray-500 ring-1 ring-gray-100">N/A</span>`;
+
+        if (values.length > 1) {
+            return `
+                <div class="flex flex-wrap gap-2">
+                    ${values.map((value) => `<span class="rounded-lg bg-white px-2 py-1 text-sm font-semibold text-gray-900 ring-1 ring-gray-100">${escapeHTML(formatSpecPrimitive(value))}</span>`).join("")}
+                </div>
+            `;
+        }
+
+        return `<span class="inline-flex rounded-lg bg-white px-2 py-1 text-sm font-semibold text-gray-900 ring-1 ring-gray-100">${escapeHTML(formatSpecPrimitive(values[0]))}</span>`;
+    }
+
+    function renderStructuredSpecValueForDetail(feature, rawValue) {
+        const schema = getFeatureFieldSchema(feature);
+        const values = getStructuredSpecValues(feature, rawValue);
+
+        if (!values.length) return `<span class="inline-flex rounded-lg bg-white px-2 py-1 text-sm font-semibold text-gray-500 ring-1 ring-gray-100">N/A</span>`;
+
+        return `
+            <div class="space-y-3">
+                ${values.map((item, index) => `
+                    <div class="rounded-xl border border-blue-100 bg-white p-3 shadow-sm">
+                        ${values.length > 1 ? `<p class="mb-2 text-[11px] font-black uppercase text-blue-900">Valor ${index + 1}</p>` : ""}
+                        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                            ${schema.map((field) => {
+                                const formatted = formatStructuredFieldValue(item[getSchemaFieldKey(field)], field) || "N/A";
+                                return `
+                                    <div class="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                                        <p class="text-[10px] font-black uppercase tracking-wide text-blue-900">${escapeHTML(getSchemaFieldLabel(field))}</p>
+                                        <p class="mt-1 break-words text-sm font-semibold text-gray-900">${escapeHTML(formatted)}</p>
+                                    </div>
+                                `;
+                            }).join("")}
+                        </div>
+                    </div>
+                `).join("")}
             </div>
         `;
     }
@@ -2760,6 +3070,18 @@
         if (!modal) return;
         modal.classList.remove("hidden");
         modal.classList.add("admin-modal-open", "flex");
+        modal.style.display = "flex";
+        modal.style.position = "fixed";
+        modal.style.top = "0";
+        modal.style.right = "0";
+        modal.style.bottom = "0";
+        modal.style.left = "0";
+        modal.style.zIndex = "1000";
+        modal.style.alignItems = "center";
+        modal.style.justifyContent = "center";
+        modal.style.background = "rgba(0, 0, 0, 0.40)";
+        modal.style.padding = "1rem";
+        modal.style.overflowY = "auto";
         modal.setAttribute("aria-hidden", "false");
     }
 
@@ -2768,6 +3090,7 @@
         if (!modal) return;
         modal.classList.add("hidden");
         modal.classList.remove("admin-modal-open", "flex");
+        modal.style.display = "none";
         modal.setAttribute("aria-hidden", "true");
     }
 
@@ -2965,8 +3288,16 @@
         return fallback;
     }
 
+    function displayValueOrNA(value) {
+        if (value === undefined || value === null) return "N/A";
+        const text = String(value).trim();
+        if (!text || text === "-" || text === "—") return "N/A";
+        return value;
+    }
+
     function getAssetId(asset) { return firstValue(asset, ["asset_id", "id", "id_asset"], "-"); }
     function getAssetSerial(asset) { return firstValue(asset, ["serial_number", "serial", "numero_serie", "n_serie"], ""); }
+    function getAssetCode(asset) { return getAssetSerial(asset) || `INV-${getAssetId(asset)}`; }
     function getAssetCategoryId(asset) { return firstValue(asset, ["category_id", "categoria_id", "id_category", "id_categoria"], ""); }
     function getAssetLocationId(asset) { return firstValue(asset, ["location_id", "local_id", "id_location", "id_local"], ""); }
     function getAssetCategoryName(asset) { return firstValue(asset, ["category_name", "category", "categoria", "nome_categoria"], "Equipamento"); }
@@ -2996,12 +3327,23 @@
     function getLogDate(log) { return firstValue(log, ["created_at", "date", "data"], ""); }
     function getLogUser(log) { return firstValue(log, ["user_email", "email", "user", "utilizador"], "Sistema"); }
     function getLogAction(log) { return firstValue(log, ["action", "acao"], ""); }
+    function getLogActionKey(log) { return String(getLogAction(log) || "").trim().toUpperCase(); }
+    function isRollbackFlagEnabled(log) { return firstValue(log, ["can_rollback", "rollback_available"], false) === true; }
     function getLogActionLabel(log) { return firstValue(log, ["action_label", "acao_label"], getLogAction(log) || "Ação"); }
     function getLogTable(log) { return firstValue(log, ["table_name", "table", "tabela"], "assets"); }
+    function getLogTableKey(log) { return String(getLogTable(log) || "").trim().toLowerCase(); }
     function getLogTableLabel(log) { return firstValue(log, ["table_label", "area"], getLogTable(log) === "assets" ? "Ativos" : getLogTable(log)); }
     function getLogDetails(log) { return firstValue(log, ["details", "description", "descricao"], `${getLogActionLabel(log)} em ${getLogTableLabel(log)} #${getLogRecordId(log)}`); }
-    function canRollbackLog(log) { return firstValue(log, ["can_rollback", "rollback_available"], false) === true; }
-    function getLogRollbackReason(log) { return firstValue(log, ["rollback_reason"], "Rollback indisponível."); }
+    function canRollbackLog(log) {
+        if (!GESTOR_ROLLBACKABLE_LOG_TABLES.has(getLogTableKey(log))) return false;
+        if (getLogActionKey(log) === "INSERT") return false;
+        return isRollbackFlagEnabled(log);
+    }
+    function getLogRollbackReason(log) {
+        if (!GESTOR_ROLLBACKABLE_LOG_TABLES.has(getLogTableKey(log))) return GESTOR_ROLLBACK_SCOPE_REASON;
+        if (getLogActionKey(log) === "INSERT") return GESTOR_ROLLBACK_INSERT_REASON;
+        return firstValue(log, ["rollback_reason"], "Rollback indisponível.");
+    }
     function getLogRollbackLabel(log) { return firstValue(log, ["rollback_label"], "Rollback"); }
     function findLog(logId) { return cacheRegistos.find((log) => String(getLogId(log)) === String(logId)); }
 
@@ -3010,8 +3352,9 @@
     function getCategoryName(category) { return firstValue(category, ["category_name", "name", "nome", "categoria"], "Sem categoria"); }
 
     function getFeatureId(feature) { return firstValue(feature, ["feature_id", "id", "id_feature"], ""); }
+    function getFeatureRawName(feature) { return firstValue(feature, ["feature_name", "name", "nome"], ""); }
     function getFeatureName(feature) {
-        return String(firstValue(feature, ["feature_name", "name", "nome"], "Característica"))
+        return String(getFeatureRawName(feature) || "Característica")
             .replace(/\[\]$/g, "")
             .replace(/\s*\(m[uú]ltiplo\)\s*$/i, "")
             .trim() || "Característica";
@@ -3070,9 +3413,29 @@
         return display;
     }
 
+    function decodeSpecValue(rawValue) {
+        if (Array.isArray(rawValue)) return rawValue;
+        if (rawValue === undefined || rawValue === null || rawValue === "") return [];
+
+        if (typeof rawValue === "string") {
+            const trimmed = rawValue.trim();
+            if ((trimmed.startsWith("[") && trimmed.endsWith("]")) || (trimmed.startsWith("{") && trimmed.endsWith("}"))) {
+                try {
+                    const parsed = JSON.parse(trimmed);
+                    if (Array.isArray(parsed)) return parsed;
+                    if (parsed && typeof parsed === "object") return [parsed];
+                } catch (error) {
+                    return [rawValue];
+                }
+            }
+        }
+
+        return [rawValue];
+    }
+
     function formatStructuredSpecValue(feature, rawValue) {
         const schema = getFeatureFieldSchema(feature);
-        const values = (Array.isArray(rawValue) ? rawValue : [rawValue])
+        const values = decodeSpecValue(rawValue)
             .map(parseSpecStructuredValue)
             .filter((item) => Object.keys(item).length > 0);
         return values.map((item) => schema.map((field) => {
@@ -3081,8 +3444,23 @@
         }).filter(Boolean).join("; ")).filter(Boolean);
     }
 
+    function getStructuredSpecValues(feature, rawValue) {
+        return decodeSpecValue(rawValue)
+            .map(parseSpecStructuredValue)
+            .filter((item) => Object.keys(item).length > 0);
+    }
+
     function getFeatureTypeLabel(feature) { return FEATURE_TYPE_LABELS[String(getFeatureType(feature)).toLowerCase()] || getFeatureType(feature) || "Texto"; }
-    function isFeatureMultiple(feature) { return Boolean(feature?.is_multiple || feature?.is_repeatable || feature?.multiple); }
+    function isFeatureMultiple(feature) {
+        if (!feature) return false;
+        const explicitValue = firstValue(feature, ["is_repeatable", "repeatable", "multipla", "multiple", "is_multiple"], null);
+        if (explicitValue !== null && explicitValue !== "") {
+            if (typeof explicitValue === "boolean") return explicitValue;
+            return ["true", "1", "sim", "yes", "on"].includes(String(explicitValue).trim().toLowerCase());
+        }
+        const rawName = String(getFeatureRawName(feature) || "").trim();
+        return rawName.endsWith("[]") || /\(m[uú]ltiplo\)$/i.test(rawName);
+    }
 
     function isFeatureActive(feature) {
         if (!feature) return true;
@@ -3128,7 +3506,7 @@
     function formatSpecPrimitive(value) {
         if (value === true) return "Sim";
         if (value === false) return "Não";
-        if (value === null || value === undefined || value === "") return "-";
+        if (value === null || value === undefined || value === "") return "N/A";
         return String(value);
     }
 
