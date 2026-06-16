@@ -1092,7 +1092,7 @@ def _apply_spec_filter(query, raw_filter: dict):
     else:
         comparable_content = func.lower(func.replace(content_text, '"', ''))
         text_for_contains = content_text
-        numeric_source = content_text
+        numeric_source = AssetSpec.content.astext
 
     expected_norm = expected.lower()
 
@@ -1107,7 +1107,6 @@ def _apply_spec_filter(query, raw_filter: dict):
     elif operator in {"not_contains", "nao_contem"}:
         value_condition = ~text_for_contains.ilike(f"%{expected}%")
     elif operator in {"gt", "gte", "lt", "lte", "greater_than", "greater_or_equal", "less_than", "less_or_equal"}:
-        conditions.append(Feature.feature_type == "number")
         try:
             expected_number = float(expected.replace(",", "."))
         except ValueError:
@@ -1500,7 +1499,6 @@ def create_asset(
         table_name="assets",
         record_id=asset.asset_id,
         user_id=admin_id,
-        old_value={},
         new_value=new_value,
     )
     db.session.commit()

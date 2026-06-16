@@ -13,18 +13,7 @@ from app.models.location import Location
 from app.models.user import User
 from app.utils.audit import log_action
 
-STRUCTURAL_ROLLBACKABLE_TABLES = {"categories", "features", "locations", "asset_specs", "specs"}
-ROLLBACKABLE_TABLES = STRUCTURAL_ROLLBACKABLE_TABLES | {"users"}
-USER_SECURITY_TABLES = {
-    "users",
-    "registration_tokens",
-    "password_reset_tokens",
-    "sessions",
-    "user_sessions",
-    "mfa",
-    "mfa_recovery",
-    "mfa_reconfiguration",
-}
+ROLLBACKABLE_TABLES = {"assets", "categories", "features", "locations", "users"}
 MANAGER_ROLLBACKABLE_TABLES = {"assets"}
 
 
@@ -34,51 +23,6 @@ def _normalized_role(role: str | None) -> str:
 
 def _rollback_origin_for_log_id(log_id: int) -> str:
     return f"rollback:{log_id}"
-
-
-def _is_rollback_origin(origin: str | None) -> bool:
-    normalized = str(origin or "").strip().lower()
-    return normalized == "rollback" or normalized.startswith("rollback:")
-
-
-def _normalized_table_name(table_name: str | None) -> str:
-    return str(table_name or "").strip().lower()
-
-
-def _is_user_security_table(table_name: str | None) -> bool:
-    normalized = _normalized_table_name(table_name)
-    return (
-        normalized in USER_SECURITY_TABLES
-        or normalized.startswith("mfa")
-        or "password" in normalized
-        or "registration" in normalized
-        or "session" in normalized
-        or normalized.startswith("user")
-    )
-
-
-def _snapshot_bool(snapshot: Any, key: str, default: bool | None = None) -> bool | None:
-    if not isinstance(snapshot, dict) or key not in snapshot:
-        return default
-    value = snapshot.get(key)
-    if isinstance(value, bool):
-        return value
-    if value in (None, ""):
-        return default
-    return str(value).strip().lower() in {"1", "true", "sim", "yes", "on", "ativo", "ativa"}
-
-
-def _is_user_account_deactivation_log(log: AuditLog | None) -> bool:
-    if not log:
-        return False
-    if _normalized_table_name(log.table_name) != "users":
-        return False
-    if str(log.action or "").upper() != "DELETE":
-        return False
-    return (
-        _snapshot_bool(log.old_value, "is_active") is True
-        and _snapshot_bool(log.new_value, "is_active") is False
-    )
 
 
 def has_already_been_rolled_back(log_id: int) -> bool:
@@ -228,7 +172,7 @@ def is_rollbackable(
     if not log:
         return False, "Registo de auditoria não encontrado."
 
-    if _is_rollback_origin(log.origin):
+    if str(log.origin or "").startswith("rollback:"):
         return False, "Este registo já foi criado por um rollback."
 
     if has_already_been_rolled_back(log.log_id):
@@ -238,19 +182,16 @@ def is_rollbackable(
     if action not in {"INSERT", "UPDATE", "DELETE"}:
         return False, "Tipo de ação sem suporte para rollback."
 
-    if _is_user_security_table(log.table_name) and not _is_user_account_deactivation_log(log):
-        return False, "Ações de utilizadores, MFA, palavras-passe ou estado de registo não podem ser revertidas por segurança."
-
     if log.table_name not in ROLLBACKABLE_TABLES:
-        return False, "Rollback disponível apenas para Locais, Categorias, Features, Specs e remoção/desativação de contas."
-
-    if log.table_name == "users" and _normalized_role(actor_role) != "Administrador":
-        return False, "Apenas administradores podem reverter remoção/desativação de contas."
+        return False, "Esta área ainda não tem rollback automático."
 
     if _normalized_role(actor_role) == "Gestor":
         manager_ok, manager_reason = can_manager_rollback_log(log, actor_id)
         if not manager_ok:
             return False, manager_reason
+
+    if log.table_name == "users" and action == "INSERT":
+        return False, "Criação de utilizadores não pode ser revertida."
 
     if action in {"UPDATE", "DELETE"} and not log.old_value:
         return False, "Este registo não tem dados anteriores para restaurar."
@@ -272,18 +213,18 @@ def rollback_log(
         return False, reason, None
 
     try:
-        if log.table_name == "categories":
+        if log.table_name == "assets":
+            data = _rollback_asset(log, actor_id)
+        elif log.table_name == "categories":
             data = _rollback_category(log, actor_id)
         elif log.table_name == "features":
             data = _rollback_feature(log, actor_id)
         elif log.table_name == "locations":
             data = _rollback_location(log, actor_id)
-        elif log.table_name in {"asset_specs", "specs"}:
-            data = _rollback_asset_spec(log, actor_id)
         elif log.table_name == "users":
-            data = _rollback_user_deactivation(log, actor_id)
+            data = _rollback_user(log, actor_id)
         else:
-            return False, "Rollback disponível apenas para Locais, Categorias, Features, Specs e remoção/desativação de contas.", None
+            return False, "Esta área ainda não tem rollback automático.", None
 
         db.session.commit()
         return True, "Rollback executado com sucesso.", data
@@ -293,140 +234,6 @@ def rollback_log(
     except IntegrityError:
         db.session.rollback()
         return False, "Rollback bloqueado por uma restrição da base de dados. Verifica duplicados ou dependências ativas.", None
-
-
-def _current_user_location_ids(user_id: int) -> list[int]:
-    return [
-        int(location_id)
-        for location_id in db.session.execute(
-            select(Location.location_id)
-            .where(Location.location_manager_id == user_id, Location.is_active == True)
-            .order_by(Location.location_id.asc())
-        ).scalars().all()
-    ]
-
-
-def _user_snapshot_dict(user: User) -> dict:
-    return {
-        "user_id": user.user_id,
-        "email": user.email,
-        "role": user.role,
-        "registration_status": user.registration_status,
-        "mfa_enabled": user.mfa_enabled,
-        "is_active": user.is_active,
-        "created_at": user.created_at.isoformat() if user.created_at else None,
-        "location_ids": _current_user_location_ids(user.user_id),
-    }
-
-
-def _to_int_list(value: Any) -> list[int]:
-    if value in (None, ""):
-        return []
-    raw_items = value if isinstance(value, list) else [value]
-    parsed: list[int] = []
-    seen: set[int] = set()
-
-    for item in raw_items:
-        parsed_item = _to_int(item)
-        if parsed_item is None or parsed_item in seen:
-            continue
-        parsed.append(parsed_item)
-        seen.add(parsed_item)
-
-    return parsed
-
-
-def _restore_user_locations(user: User, snapshot: dict) -> None:
-    if "location_ids" not in snapshot:
-        return
-
-    location_ids = _to_int_list(snapshot.get("location_ids"))
-    selected_ids = set(location_ids)
-
-    current_locations = db.session.execute(
-        select(Location).where(Location.location_manager_id == user.user_id).with_for_update()
-    ).scalars().all()
-
-    for location in current_locations:
-        if location.location_id not in selected_ids:
-            location.location_manager_id = None
-
-    if not selected_ids:
-        return
-
-    locations = db.session.execute(
-        select(Location)
-        .where(Location.location_id.in_(location_ids), Location.is_active == True)
-        .with_for_update()
-    ).scalars().all()
-
-    found_ids = {location.location_id for location in locations}
-    missing_ids = selected_ids - found_ids
-    if missing_ids:
-        raise ValueError("Não foi possível restaurar: uma ou mais salas atribuídas já não existem ou estão inativas.")
-
-    unavailable = [
-        location
-        for location in locations
-        if location.location_manager_id is not None
-        and location.location_manager_id != user.user_id
-    ]
-    if unavailable:
-        raise ValueError("Não foi possível restaurar: uma ou mais salas já têm outro gestor associado.")
-
-    for location in locations:
-        location.location_manager_id = user.user_id
-
-
-def _rollback_user_deactivation(log: AuditLog, actor_id: int | None) -> dict:
-    if not _is_user_account_deactivation_log(log):
-        raise ValueError("Apenas remoção/desativação de contas pode ser revertida.")
-
-    user = db.session.get(User, log.record_id)
-    if not user:
-        raise ValueError("Utilizador não encontrado na base de dados.")
-
-    if user.is_active:
-        raise ValueError("A conta já se encontra ativa.")
-
-    snapshot = log.old_value or {}
-    email = _clean(snapshot.get("email"))
-    role = _clean(snapshot.get("role") or user.role)
-    registration_status = _clean(snapshot.get("registration_status") or user.registration_status)
-
-    if not email:
-        raise ValueError("O registo antigo do utilizador está incompleto.")
-
-    conflict = db.session.execute(
-        select(User.user_id)
-        .where(User.email == email, User.user_id != user.user_id)
-        .limit(1)
-    ).scalar_one_or_none()
-    if conflict:
-        raise ValueError("Não foi possível restaurar: já existe outro utilizador com o mesmo email.")
-
-    old_current = _user_snapshot_dict(user)
-
-    user.email = email
-    user.role = role
-    user.registration_status = registration_status
-    user.mfa_enabled = _to_bool(snapshot.get("mfa_enabled"), user.mfa_enabled)
-    user.is_active = True
-    _restore_user_locations(user, snapshot)
-
-    db.session.flush()
-    new_value = _user_snapshot_dict(user)
-
-    log_action(
-        action="UPDATE",
-        table_name="users",
-        record_id=user.user_id,
-        user_id=actor_id,
-        origin=_rollback_origin(log),
-        old_value=old_current,
-        new_value=new_value,
-    )
-    return new_value
 
 
 def _rollback_origin(log: AuditLog) -> str:
@@ -775,71 +582,71 @@ def _rollback_location(log: AuditLog, actor_id: int | None) -> dict:
     return new_value
 
 
+def _user_snapshot_dict(user: User) -> dict:
+    from app.services.user_service import user_to_dict
 
-def _asset_spec_snapshot_dict(spec: AssetSpec) -> dict:
-    return {
-        "spec_id": spec.spec_id,
-        "feature_id": spec.feature_id,
-        "asset_id": spec.asset_id,
-        "content": spec.content,
-        "spec_value": spec.content,
-        "is_active": spec.is_active,
-    }
+    return user_to_dict(user)
 
 
-def _apply_asset_spec_snapshot(spec: AssetSpec, snapshot: dict) -> None:
-    feature_id = _to_int(snapshot.get("feature_id"))
-    asset_id = _to_int(snapshot.get("asset_id"))
-    if not feature_id or not asset_id:
-        raise ValueError("O registo antigo da spec está incompleto.")
+def _restore_user_locations(user: User, snapshot: dict) -> None:
+    location_ids = snapshot.get("location_ids")
+    if not isinstance(location_ids, list):
+        return
 
-    asset = db.session.get(Asset, asset_id)
-    if not asset:
-        raise ValueError("Não foi possível restaurar: o ativo associado já não existe.")
+    wanted_ids = {_to_int(location_id) for location_id in location_ids}
+    wanted_ids.discard(None)
 
-    feature = db.session.get(Feature, feature_id)
-    if not feature:
-        raise ValueError("Não foi possível restaurar: a feature associada já não existe.")
+    for location in db.session.execute(select(Location).where(Location.location_manager_id == user.user_id)).scalars().all():
+        if location.location_id not in wanted_ids:
+            location.location_manager_id = None
 
-    spec.asset_id = asset_id
-    spec.feature_id = feature_id
-    spec.content = snapshot.get("content", snapshot.get("spec_value"))
-    spec.is_active = _to_bool(snapshot.get("is_active"), True)
+    if wanted_ids:
+        for location in db.session.execute(select(Location).where(Location.location_id.in_(wanted_ids))).scalars().all():
+            location.location_manager_id = user.user_id
 
 
-def _rollback_asset_spec(log: AuditLog, actor_id: int | None) -> dict:
-    spec = db.session.get(AssetSpec, log.record_id)
-    if not spec:
-        raise ValueError("Spec não encontrada na base de dados.")
+def _apply_user_snapshot(user: User, snapshot: dict) -> None:
+    email = _clean(snapshot.get("email")).lower()
+    if not email:
+        raise ValueError("O registo antigo do utilizador está incompleto.")
+    conflict = db.session.execute(
+        select(User.user_id).where(User.email == email, User.user_id != user.user_id).limit(1)
+    ).scalar_one_or_none()
+    if conflict:
+        raise ValueError("Não foi possível restaurar: já existe outro utilizador com o mesmo email.")
+
+    user.email = email
+    user.role = snapshot.get("role") if snapshot.get("role") in {"Gestor", "Administrador"} else user.role
+    user.registration_status = (
+        snapshot.get("registration_status")
+        if snapshot.get("registration_status") in {"Pendente", "Concluído"}
+        else user.registration_status
+    )
+    user.mfa_enabled = _to_bool(snapshot.get("mfa_enabled"), bool(user.mfa_enabled))
+    user.is_active = _to_bool(snapshot.get("is_active"), True)
+    _restore_user_locations(user, snapshot)
+
+
+def _rollback_user(log: AuditLog, actor_id: int | None) -> dict:
+    user = db.session.get(User, log.record_id)
+    if not user:
+        raise ValueError("Utilizador não encontrado na base de dados.")
 
     action = str(log.action or "").upper()
-    old_current = _asset_spec_snapshot_dict(spec)
+    old_current = _user_snapshot_dict(user)
 
     if action == "INSERT":
-        spec.is_active = False
-        new_value = _asset_spec_snapshot_dict(spec)
-        log_action(
-            action="DELETE",
-            table_name="asset_specs",
-            record_id=spec.spec_id,
-            user_id=actor_id,
-            origin=_rollback_origin(log),
-            old_value=old_current,
-            new_value=new_value,
-        )
+        if actor_id is not None and user.user_id == actor_id:
+            raise ValueError("Não podes reverter a criação da tua própria conta autenticada.")
+        user.is_active = False
+        _restore_user_locations(user, {"location_ids": []})
+        new_value = _user_snapshot_dict(user)
+        log_action("DELETE", "users", user.user_id, actor_id, _rollback_origin(log), old_current, new_value)
         return new_value
 
     snapshot = log.old_value or {}
-    _apply_asset_spec_snapshot(spec, snapshot)
+    _apply_user_snapshot(user, snapshot)
     db.session.flush()
-    new_value = _asset_spec_snapshot_dict(spec)
-    log_action(
-        action="UPDATE",
-        table_name="asset_specs",
-        record_id=spec.spec_id,
-        user_id=actor_id,
-        origin=_rollback_origin(log),
-        old_value=old_current,
-        new_value=new_value,
-    )
+    new_value = _user_snapshot_dict(user)
+    log_action("UPDATE", "users", user.user_id, actor_id, _rollback_origin(log), old_current, new_value)
     return new_value
