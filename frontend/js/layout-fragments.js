@@ -141,13 +141,19 @@
             const icon = ICONS[item.icon] || ICONS.dashboard;
             const isActive = item.id === activeView;
             return `
-                <button type="button" onclick="showView('${item.id}')" id="btn-${item.id}"
+                <button type="button" data-dashboard-view="${item.id}" id="btn-${item.id}"
                     class="${isActive ? activeClass : inactiveClass}">
                     ${icon}
                     <span>${item.label}</span>
                 </button>
             `;
         }).join("");
+
+        nav.querySelectorAll("[data-dashboard-view]").forEach((button) => {
+            button.addEventListener("click", () => {
+                window.showView?.(button.dataset.dashboardView);
+            });
+        });
     }
 
     async function mountDashboardLayout(options = {}) {

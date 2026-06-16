@@ -15,7 +15,7 @@
     <div class="flex gap-1">
       <img src="../../assets/ubi-logo-dark.png" class="w-12 h-12 object-contain" alt="Logo UBI">
     </div>
-    <span class="text-4xl font-extrabold tracking-wider" style="color: #002566;">InvUBI</span>
+    <span class="text-4xl font-extrabold tracking-wider text-blue-900">InvUBI</span>
   </header>
 
   <main
@@ -25,12 +25,12 @@
       <div
         class="w-16 h-16 bg-blue-50 border border-blue-100 rounded-full flex items-center justify-center mb-3 shadow-sm">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
-          style="color: #002566;" class="size-10">
+          class="size-10 text-blue-900">
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
         </svg>
       </div>
-      <h2 class="text-2xl font-black tracking-tight" style="color: #002566;">Log In</h2>
+      <h2 class="text-2xl font-black tracking-tight text-blue-900">Log In</h2>
       <p class="text-xs text-slate-500 mt-1">Introduza os seus dados para aceder à plataforma</p>
     </div>
 
@@ -79,13 +79,8 @@
       <button type="submit" id="submitBtn"
         class="w-full bg-blue-900 text-white py-3.5 rounded-xl font-bold uppercase tracking-wider hover:bg-blue-800 active:scale-[0.99] transition-all duration-150 shadow-md shadow-blue-900/10 mt-2 flex items-center justify-center gap-3 disabled:bg-blue-900/50 disabled:opacity-80 disabled:cursor-not-allowed">
 
-        <svg id="btnSpinner" class="h-5 w-5 text-amber-400 hidden" style="animation: spin 1s linear infinite;"
+        <svg id="btnSpinner" class="security-spin h-5 w-5 text-amber-400 hidden"
           xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <style>
-            @keyframes spin {
-              to { transform: rotate(360deg); }
-            }
-          </style>
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor"
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">

@@ -2865,18 +2865,6 @@ function abrirModal(modalId) {
 
     modal.classList.remove("hidden");
     modal.classList.add("admin-modal-open", "flex");
-    modal.style.display = "flex";
-    modal.style.position = "fixed";
-    modal.style.top = "0";
-    modal.style.right = "0";
-    modal.style.bottom = "0";
-    modal.style.left = "0";
-    modal.style.zIndex = "1000";
-    modal.style.alignItems = "center";
-    modal.style.justifyContent = "center";
-    modal.style.background = "rgba(0, 0, 0, 0.40)";
-    modal.style.padding = "1rem";
-    modal.style.overflowY = "auto";
     modal.setAttribute("aria-hidden", "false");
 }
 
@@ -2886,7 +2874,6 @@ function fecharModal(modalId) {
 
     modal.classList.add("hidden");
     modal.classList.remove("admin-modal-open", "flex");
-    modal.style.display = "none";
     modal.setAttribute("aria-hidden", "true");
 }
 
@@ -4045,10 +4032,6 @@ function renderAssetDetail(asset) {
 
     if (editButton) {
         editButton.dataset.assetId = getAssetId(asset);
-        editButton.onclick = () => {
-            fecharModal("modalDetalheAtivo");
-            editarAtivo(getAssetId(asset));
-        };
     }
 
     content.innerHTML = `
@@ -4604,6 +4587,13 @@ function ligarAcoesGerais() {
             return;
         }
 
+        const addCategoryFeatureButton = event.target.closest("[data-category-feature-add]");
+        if (addCategoryFeatureButton) {
+            event.preventDefault();
+            adicionarLinhaFeatureCategoria();
+            return;
+        }
+
         const logActionButton = event.target.closest("[data-log-action]");
         if (logActionButton) {
             event.preventDefault();
@@ -4632,39 +4622,52 @@ function ligarAcoesGerais() {
 
 function ligarAcoesAtivos() {
     const tbody = document.getElementById("assetsTableBody");
-    if (!tbody || tbody.dataset.assetActionsListenerAttached === "true") return;
+    if (tbody && tbody.dataset.assetActionsListenerAttached !== "true") {
+        tbody.addEventListener("click", event => {
+            const button = event.target.closest("[data-asset-action]");
 
-    tbody.addEventListener("click", event => {
-        const button = event.target.closest("[data-asset-action]");
+            if (button) {
+                event.preventDefault();
+                event.stopPropagation();
+                const assetId = button.dataset.assetId;
+                if (!assetId) return;
 
-        if (button) {
+                if (button.dataset.assetAction === "view") {
+                    verDetalheAtivo(assetId);
+                }
+
+                if (button.dataset.assetAction === "edit") {
+                    editarAtivo(assetId);
+                }
+
+                if (button.dataset.assetAction === "remove") {
+                    removerAtivo(assetId);
+                }
+
+                return;
+            }
+
+            const row = event.target.closest("[data-asset-row-id]");
+            if (row?.dataset.assetRowId) {
+                verDetalheAtivo(row.dataset.assetRowId);
+            }
+        });
+
+        tbody.dataset.assetActionsListenerAttached = "true";
+    }
+
+    const detailEditButton = document.getElementById("assetDetailEditButton");
+    if (detailEditButton && detailEditButton.dataset.listenerAttached !== "true") {
+        detailEditButton.addEventListener("click", event => {
             event.preventDefault();
-            event.stopPropagation();
-            const assetId = button.dataset.assetId;
+            const assetId = detailEditButton.dataset.assetId;
             if (!assetId) return;
 
-            if (button.dataset.assetAction === "view") {
-                verDetalheAtivo(assetId);
-            }
-
-            if (button.dataset.assetAction === "edit") {
-                editarAtivo(assetId);
-            }
-
-            if (button.dataset.assetAction === "remove") {
-                removerAtivo(assetId);
-            }
-
-            return;
-        }
-
-        const row = event.target.closest("[data-asset-row-id]");
-        if (row?.dataset.assetRowId) {
-            verDetalheAtivo(row.dataset.assetRowId);
-        }
-    });
-
-    tbody.dataset.assetActionsListenerAttached = "true";
+            fecharModal("modalDetalheAtivo");
+            editarAtivo(assetId);
+        });
+        detailEditButton.dataset.listenerAttached = "true";
+    }
 }
 
 function ligarAcoesCategorias() {
