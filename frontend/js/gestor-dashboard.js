@@ -2760,18 +2760,6 @@
         if (!modal) return;
         modal.classList.remove("hidden");
         modal.classList.add("admin-modal-open", "flex");
-        modal.style.display = "flex";
-        modal.style.position = "fixed";
-        modal.style.top = "0";
-        modal.style.right = "0";
-        modal.style.bottom = "0";
-        modal.style.left = "0";
-        modal.style.zIndex = "1000";
-        modal.style.alignItems = "center";
-        modal.style.justifyContent = "center";
-        modal.style.background = "rgba(0, 0, 0, 0.40)";
-        modal.style.padding = "1rem";
-        modal.style.overflowY = "auto";
         modal.setAttribute("aria-hidden", "false");
     }
 
@@ -2780,7 +2768,6 @@
         if (!modal) return;
         modal.classList.add("hidden");
         modal.classList.remove("admin-modal-open", "flex");
-        modal.style.display = "none";
         modal.setAttribute("aria-hidden", "true");
     }
 

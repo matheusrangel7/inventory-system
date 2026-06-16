@@ -39,3 +39,24 @@ para bootstrap e manutenção da base de dados.
 
 Dados opcionais para demonstração podem ser carregados seguindo
 [`db/seeds/README.md`](db/seeds/README.md).
+
+## Headers de segurança
+
+O Nginx aplica CSP e os restantes headers de segurança em todos os ambientes.
+O HSTS varia por configuração:
+
+```env
+# Desenvolvimento local
+NGINX_HSTS_VALUE=max-age=0
+
+# Produção, apenas após HTTPS definitivo em todos os subdomínios
+NGINX_HSTS_VALUE=max-age=31536000; includeSubDomains
+```
+
+Não ative `preload` antes de validar o domínio e todos os seus subdomínios.
+
+Valide a política estática do frontend e do Nginx com:
+
+```bash
+python scripts/check_security_hardening.py
+```
