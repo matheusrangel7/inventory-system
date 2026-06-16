@@ -26,6 +26,17 @@ const LOG_CHART_PERIOD_LABELS = {
     year: "Último ano",
     month: "Últimos 30 dias"
 };
+const ADMIN_ROLLBACKABLE_LOG_TABLES = new Set(["locations", "categories", "features", "asset_specs", "specs", "users"]);
+const USER_SECURITY_LOG_TABLES = new Set([
+    "users",
+    "registration_tokens",
+    "password_reset_tokens",
+    "sessions",
+    "user_sessions",
+    "mfa",
+    "mfa_recovery",
+    "mfa_reconfiguration"
+]);
 const ASSET_COLUMN_STORAGE_KEY = "invubi.assets.visibleColumns.admin.v6";
 const ASSET_REQUIRED_COLUMN_KEYS = new Set(["id", "category"]);
 const ASSET_DEFAULT_COLUMN_KEYS = ["id", "asset", "category", "location", "status"];
@@ -2716,8 +2727,38 @@ function getLogTable(log) {
     return primeiroValor(log, ["table_name", "table", "tabela"], "Registo");
 }
 
-function isUserCreationLog(log) {
-    return String(getLogTable(log) || "").toLowerCase() === "users" && String(getLogAction(log) || "").toUpperCase() === "INSERT";
+function getLogTableKey(log) {
+    return String(getLogTable(log) || "").trim().toLowerCase();
+}
+
+function parseAuditBoolean(value, fallback = null) {
+    if (typeof value === "boolean") return value;
+    if (value === undefined || value === null || value === "") return fallback;
+    return ["1", "true", "sim", "yes", "on", "ativo", "ativa"].includes(String(value).trim().toLowerCase());
+}
+
+function isUserAccountDeactivationLog(log) {
+    if (getLogTableKey(log) !== "users") return false;
+    if (String(getLogAction(log) || "").trim().toUpperCase() !== "DELETE") return false;
+    return parseAuditBoolean(log?.old_value?.is_active) === true
+        && parseAuditBoolean(log?.new_value?.is_active) === false;
+}
+
+function isUserSecurityLog(log) {
+    if (isUserAccountDeactivationLog(log)) return false;
+
+    const table = getLogTableKey(log);
+    return USER_SECURITY_LOG_TABLES.has(table)
+        || table.startsWith("mfa")
+        || table.startsWith("user")
+        || table.includes("password")
+        || table.includes("registration")
+        || table.includes("session");
+}
+
+function isAdminRollbackableLogTable(log) {
+    if (getLogTableKey(log) === "users") return isUserAccountDeactivationLog(log);
+    return ADMIN_ROLLBACKABLE_LOG_TABLES.has(getLogTableKey(log));
 }
 
 function getLogTableLabel(log) {
@@ -2729,12 +2770,18 @@ function getLogDetails(log) {
 }
 
 function canRollbackLog(log) {
-    if (isUserCreationLog(log)) return false;
+    if (!isAdminRollbackableLogTable(log)) return false;
+    if (isUserSecurityLog(log)) return false;
     return primeiroValor(log, ["can_rollback", "rollback_available"], false) === true;
 }
 
 function getLogRollbackReason(log) {
-    if (isUserCreationLog(log)) return "Criação de utilizadores não pode ser revertida.";
+    if (isUserSecurityLog(log)) {
+        return "Ações de utilizadores, MFA, palavras-passe ou estado de registo não podem ser revertidas por segurança. Só a remoção/desativação de conta pode ser revertida.";
+    }
+    if (!isAdminRollbackableLogTable(log)) {
+        return "Rollback disponível apenas para Locais, Categorias, Features, Specs e remoção/desativação de contas.";
+    }
     return primeiroValor(log, ["rollback_reason"], "Rollback indisponível.");
 }
 
@@ -4267,8 +4314,8 @@ function renderLogDetail(log) {
 async function rollbackRegisto(logId) {
     const log = cacheRegistos.find(item => String(getLogId(item)) === String(logId));
 
-    if (log && isUserCreationLog(log)) {
-        mostrarToast("Criação de utilizadores não pode ser revertida.", true);
+    if (log && !canRollbackLog(log)) {
+        mostrarToast(getLogRollbackReason(log), true);
         return;
     }
 

@@ -446,7 +446,10 @@ def delete_user(user_id: int, admin_id: int) -> tuple[bool, str, User | None]:
     if user.role != UserRole.MANAGER:
         return False, "Apenas gestores podem ser removidos por esta rota.", None
 
-    old_value = _user_audit_dict(user)
+    old_value = {
+        **_user_audit_dict(user),
+        "location_ids": _location_ids_by_user_ids([user.user_id]).get(user.user_id, []),
+    }
     user.is_active = False
     clear_registration_token(user)
 
@@ -466,7 +469,7 @@ def delete_user(user_id: int, admin_id: int) -> tuple[bool, str, User | None]:
         record_id=user.user_id,
         user_id=admin_id,
         old_value=old_value,
-        new_value={**old_value, "is_active": False},
+        new_value={**old_value, "is_active": False, "location_ids": []},
     )
     db.session.commit()
     session_service.revoke_all_sessions(user.user_id)
