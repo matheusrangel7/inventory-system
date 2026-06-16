@@ -1,0 +1,43 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      FLASK_ENV: production
+      FLASK_DEBUG: 0
+      SECRET_KEY: "${SECRET_KEY:?SECRET_KEY is required}"
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}"
+      APP_DB_PASSWORD: "${APP_DB_PASSWORD:?APP_DB_PASSWORD is required}"
+      JWT_COOKIE_SECURE: "true"
+      JWT_COOKIE_CSRF_PROTECT: "true"
+      REQUIRE_MUTATING_ORIGIN: "true"
+      RATELIMIT_STORAGE_URI: "${RATELIMIT_STORAGE_URI:-redis://redis:6379/0}"
+      APP_BASE_URL: "${APP_BASE_URL:-https://invubi.pt}"
+
+  frontend:
+    environment:
+      NGINX_HSTS_VALUE: "${NGINX_HSTS_VALUE:-max-age=31536000; includeSubDomains}"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+      - --token
+      - ${CLOUDFLARED_TOKEN:?CLOUDFLARED_TOKEN is required}
+    depends_on:
+      - frontend

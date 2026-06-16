@@ -50,8 +50,8 @@ services:
     depends_on:
       - backend
     ports:
-      - "80:80"
-      - "443:443"
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
     environment:
       NGINX_HSTS_VALUE: "${NGINX_HSTS_VALUE:-max-age=0}"
     volumes:
@@ -62,8 +62,8 @@ services:
     image: mailhog/mailhog
     restart: unless-stopped
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
 
 volumes:
   db_data:
