@@ -21,6 +21,7 @@ python -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_b
 Use o valor em `TOTP_ENCRYPTION_KEYS_JSON` e mantenha o respetivo ID em
 `TOTP_ENCRYPTION_ACTIVE_KEY_ID`. Mantenha o JSON entre aspas simples, como no
 `.env.example`. O backend não arranca sem um keyring válido.
+
 2. Reconstrua a base de dados quando alterar os scripts de `db/init`:
 
 ```bash
@@ -39,6 +40,35 @@ para bootstrap e manutenção da base de dados.
 
 Dados opcionais para demonstração podem ser carregados seguindo
 [`db/seeds/README.md`](db/seeds/README.md).
+
+## HTTPS local com mkcert
+
+O Nginx espera certificados locais em `nginx/certs/nginx.crt` e
+`nginx/certs/nginx.key`. Estes ficheiros são privados da máquina e não devem ser
+versionados.
+
+Instale o `mkcert` seguindo a documentação oficial:
+[`FiloSottile/mkcert`](https://github.com/FiloSottile/mkcert).
+
+Depois gere os certificados esperados pelo projeto:
+
+```bash
+mkcert -install
+mkdir -p nginx/certs
+mkcert -cert-file nginx/certs/nginx.crt \
+       -key-file nginx/certs/nginx.key \
+       localhost 127.0.0.1 ::1
+docker compose up -d --build frontend
+```
+
+Confirme que os certificados continuam ignorados pelo Git:
+
+```bash
+git check-ignore -v nginx/certs/nginx.crt nginx/certs/nginx.key
+```
+
+Em desenvolvimento mantenha `APP_BASE_URL=https://localhost` e
+`NGINX_HSTS_VALUE=max-age=0`.
 
 ## Headers de segurança
 
