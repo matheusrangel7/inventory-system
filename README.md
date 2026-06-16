@@ -90,3 +90,59 @@ Valide a política estática do frontend e do Nginx com:
 ```bash
 python scripts/check_security_hardening.py
 ```
+
+## Demonstração com Cloudflare Tunnel
+
+Para expor a aplicação via Cloudflare Tunnel, crie um tunnel gerido pelo
+Dashboard em Cloudflare Zero Trust e associe o hostname público:
+
+```text
+Hostname: invubi.pt
+Service: https://frontend:443
+```
+
+Como o origin interno usa o certificado local do Nginx, ative `No TLS Verify`
+nas definições TLS do origin. O TLS público continua a ser fornecido pela
+Cloudflare.
+
+Copie `.env.tunnel.example` para `.env.tunnel` e preencha
+`CLOUDFLARED_TOKEN` com o token gerado pela Cloudflare. Não versione
+`.env.tunnel`.
+
+Antes de subir em modo Tunnel, confirme que `SECRET_KEY`, `JWT_SECRET_KEY` e
+`APP_DB_PASSWORD` são fortes. Eles podem estar no `.env` ou ser sobrescritos no
+`.env.tunnel`. Como o backend usa `FLASK_ENV=production`, ele não arranca com
+segredos fracos ou rate limit em memória. Se alterar `APP_DB_PASSWORD` numa
+instalação descartável, recrie o volume com `docker compose down -v` para a
+password do utilizador da base ficar alinhada.
+
+Suba a stack de demonstração com:
+
+```bash
+docker compose --env-file .env \
+  --env-file .env.tunnel \
+  -f docker-compose.yml \
+  -f docker-compose.tunnel.yml \
+  up -d --build
+```
+
+Valide:
+
+```bash
+docker compose --env-file .env \
+  --env-file .env.tunnel \
+  -f docker-compose.yml \
+  -f docker-compose.tunnel.yml \
+  ps
+docker compose --env-file .env \
+  --env-file .env.tunnel \
+  -f docker-compose.yml \
+  -f docker-compose.tunnel.yml \
+  logs -f cloudflared
+curl -I https://invubi.pt/login
+curl -I https://invubi.pt/api/health
+```
+
+O ambiente de demonstração usa Redis para rate limit compartilhado, cookies
+seguros, CSRF ativo, validação de origem ativa e HSTS com
+`max-age=31536000; includeSubDomains`. Não ative `preload` nesta etapa.
