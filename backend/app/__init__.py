@@ -111,6 +111,34 @@ def _validate_security_config(app: Flask, config_name: str) -> None:
     if app_db_password in insecure_values or len(app_db_password) < 12:
         raise RuntimeError("APP_DB_PASSWORD deve ser forte em produção.")
 
+    _validate_production_email_config(app)
+
+
+def _validate_production_email_config(app: Flask) -> None:
+    app_base_url = str(app.config.get("APP_BASE_URL") or "")
+    if not app_base_url.startswith("https://"):
+        raise RuntimeError("APP_BASE_URL deve usar HTTPS em produção.")
+
+    mail_server = str(app.config.get("MAIL_SERVER") or "").strip()
+    mail_port = app.config.get("MAIL_PORT")
+    mail_sender = str(app.config.get("MAIL_DEFAULT_SENDER") or "").strip()
+
+    if not mail_server or not mail_port or not mail_sender:
+        raise RuntimeError("Configuração de email incompleta em produção.")
+
+    if mail_server.lower() == "mailhog":
+        raise RuntimeError("MAIL_SERVER não pode usar Mailhog em produção.")
+
+    if mail_server.lower() == "smtp.resend.com":
+        if app.config.get("MAIL_USERNAME") != "resend":
+            raise RuntimeError("MAIL_USERNAME deve ser resend para SMTP Resend.")
+        if not app.config.get("MAIL_PASSWORD"):
+            raise RuntimeError("MAIL_PASSWORD é obrigatório para SMTP Resend.")
+        if not app.config.get("MAIL_USE_TLS") or app.config.get("MAIL_USE_SSL"):
+            raise RuntimeError(
+                "SMTP Resend deve usar MAIL_USE_TLS=true e MAIL_USE_SSL=false."
+            )
+
 
 def _register_cli(app: Flask) -> None:
     from app.cli import bootstrap_admin

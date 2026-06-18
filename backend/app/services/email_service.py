@@ -5,6 +5,33 @@ from flask_mail import Message
 from app.extensions import mail
 
 
+def _mask_email(email: str) -> str:
+    if not email or "@" not in email:
+        return "***"
+
+    local_part, domain = email.rsplit("@", 1)
+    if not local_part or not domain:
+        return "***"
+
+    visible = local_part[:2] if len(local_part) > 1 else local_part[:1]
+    return f"{visible}***@{domain}"
+
+
+def _send_message(msg: Message, event: str) -> bool:
+    recipient = msg.recipients[0] if msg.recipients else ""
+    try:
+        mail.send(msg)
+        return True
+    except Exception as exc:
+        current_app.logger.error(
+            "Falha ao enviar email de %s para %s (%s).",
+            event,
+            _mask_email(recipient),
+            type(exc).__name__,
+        )
+        return False
+
+
 def send_registration_email(to_email: str, token: str) -> bool:
     base_url = (current_app.config.get("APP_BASE_URL") or "http://localhost").rstrip(
         "/"
@@ -12,7 +39,7 @@ def send_registration_email(to_email: str, token: str) -> bool:
     link = f"{base_url}/primeiro-acesso?token={token}"
 
     msg = Message(
-        subject="Conclusão do Registo — InvUBI (Sistema de inventário)",
+        subject="[InvUBI] Conclusão do registo",
         recipients=[to_email],
         # Corpo em texto simples (para clientes sem suporte HTML)
         body=(
@@ -33,12 +60,7 @@ def send_registration_email(to_email: str, token: str) -> bool:
         ),
     )
 
-    try:
-        mail.send(msg)
-        return True
-    except Exception as e:
-        current_app.logger.error(f"Erro ao enviar email para {to_email}: {e}")
-        return False
+    return _send_message(msg, "registration")
 
 
 def send_maintenance_alert_email(
@@ -86,14 +108,7 @@ def send_maintenance_alert_email(
         html=body_html,
     )
 
-    try:
-        mail.send(msg)
-        return True
-    except Exception as ex:
-        current_app.logger.error(
-            f"Erro ao enviar alerta de manutenção para {to_email}: {ex}"
-        )
-        return False
+    return _send_message(msg, "maintenance_alert")
 
 
 def send_admin_transfer_email(to_email: str) -> bool:
@@ -122,12 +137,7 @@ def send_admin_transfer_email(to_email: str) -> bool:
         html=body_html,
     )
 
-    try:
-        mail.send(msg)
-        return True
-    except Exception as exc:
-        current_app.logger.error(f"Erro ao enviar email de transferência: {exc}")
-        return False
+    return _send_message(msg, "admin_transfer_promotion")
 
 
 def send_admin_demoted_email(to_email: str) -> bool:
@@ -145,12 +155,7 @@ def send_admin_demoted_email(to_email: str) -> bool:
         ),
     )
 
-    try:
-        mail.send(msg)
-        return True
-    except Exception as exc:
-        current_app.logger.error(f"Erro ao enviar email de rebaixamento: {exc}")
-        return False
+    return _send_message(msg, "admin_transfer_demotion")
 
 
 def send_password_reset_email(to_email: str, token: str) -> bool:
@@ -180,14 +185,7 @@ def send_password_reset_email(to_email: str, token: str) -> bool:
         ),
     )
 
-    try:
-        mail.send(msg)
-        return True
-    except Exception as exc:
-        current_app.logger.error(
-            f"Erro ao enviar email de recuperação para {to_email}: {exc}"
-        )
-        return False
+    return _send_message(msg, "password_reset")
 
 
 def send_password_reset_confirmation_email(to_email: str) -> bool:
@@ -210,14 +208,7 @@ def send_password_reset_confirmation_email(to_email: str) -> bool:
         ),
     )
 
-    try:
-        mail.send(msg)
-        return True
-    except Exception as exc:
-        current_app.logger.error(
-            f"Erro ao enviar confirmação de recuperação para {to_email}: {exc}"
-        )
-        return False
+    return _send_message(msg, "password_reset_confirmation")
 
 
 def send_password_change_confirmation_email(to_email: str) -> bool:
@@ -240,14 +231,7 @@ def send_password_change_confirmation_email(to_email: str) -> bool:
         ),
     )
 
-    try:
-        mail.send(msg)
-        return True
-    except Exception as exc:
-        current_app.logger.error(
-            f"Erro ao enviar confirmação de alteração para {to_email}: {exc}"
-        )
-        return False
+    return _send_message(msg, "password_change_confirmation")
 
 
 def send_recovery_email_changed_old_address(
@@ -275,14 +259,7 @@ def send_recovery_email_changed_old_address(
         ),
     )
 
-    try:
-        mail.send(msg)
-        return True
-    except Exception as exc:
-        current_app.logger.error(
-            f"Erro ao notificar o email anterior {old_email}: {exc}"
-        )
-        return False
+    return _send_message(msg, "administrative_email_change_old_address")
 
 
 def send_recovery_email_changed_new_address(
@@ -309,14 +286,7 @@ def send_recovery_email_changed_new_address(
         ),
     )
 
-    try:
-        mail.send(msg)
-        return True
-    except Exception as exc:
-        current_app.logger.error(
-            f"Erro ao notificar o novo email {new_email}: {exc}"
-        )
-        return False
+    return _send_message(msg, "administrative_email_change_new_address")
 
 
 def send_administrative_mfa_reset_email(to_email: str) -> bool:
@@ -340,11 +310,4 @@ def send_administrative_mfa_reset_email(to_email: str) -> bool:
         ),
     )
 
-    try:
-        mail.send(msg)
-        return True
-    except Exception as exc:
-        current_app.logger.error(
-            f"Erro ao notificar redefinição MFA para {to_email}: {exc}"
-        )
-        return False
+    return _send_message(msg, "administrative_mfa_reset")
