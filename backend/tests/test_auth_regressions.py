@@ -262,6 +262,66 @@ def test_production_rejects_in_memory_rate_limit_storage():
         _validate_security_config(app, "production")
 
 
+def _production_ready_app():
+    app = Flask(__name__)
+    app.config.update(
+        SECRET_KEY="s" * 64,
+        JWT_SECRET_KEY="j" * 64,
+        JWT_COOKIE_SECURE=True,
+        JWT_COOKIE_CSRF_PROTECT=True,
+        REQUIRE_MUTATING_ORIGIN=True,
+        RATELIMIT_STORAGE_URI="redis://redis:6379/0",
+        APP_DB_USER="app_user",
+        APP_DB_PASSWORD="strong-db-password",
+        APP_BASE_URL="https://invubi.pt",
+        MAIL_SERVER="smtp.resend.com",
+        MAIL_PORT=587,
+        MAIL_USE_TLS=True,
+        MAIL_USE_SSL=False,
+        MAIL_USERNAME="resend",
+        MAIL_PASSWORD="re_test_key",
+        MAIL_DEFAULT_SENDER="InvUBI <sistema@mail.invubi.pt>",
+    )
+    return app
+
+
+def test_production_rejects_non_https_base_url():
+    app = _production_ready_app()
+    app.config["APP_BASE_URL"] = "http://invubi.pt"
+
+    with pytest.raises(RuntimeError, match="APP_BASE_URL"):
+        _validate_security_config(app, "production")
+
+
+def test_production_rejects_mailhog_email_server():
+    app = _production_ready_app()
+    app.config["MAIL_SERVER"] = "mailhog"
+
+    with pytest.raises(RuntimeError, match="Mailhog"):
+        _validate_security_config(app, "production")
+
+
+def test_production_rejects_incomplete_resend_email_config():
+    app = _production_ready_app()
+    app.config["MAIL_PASSWORD"] = ""
+
+    with pytest.raises(RuntimeError, match="MAIL_PASSWORD"):
+        _validate_security_config(app, "production")
+
+
+def test_production_accepts_valid_resend_email_config():
+    app = _production_ready_app()
+
+    _validate_security_config(app, "production")
+
+
+def test_development_allows_mailhog_email_server():
+    app = Flask(__name__)
+    app.config.update(MAIL_SERVER="mailhog")
+
+    _validate_security_config(app, "development")
+
+
 def test_request_origin_uses_proxy_normalized_request_values():
     app = Flask(__name__)
 
