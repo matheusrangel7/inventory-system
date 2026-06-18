@@ -36,6 +36,13 @@ services:
       REQUIRE_MUTATING_ORIGIN: "true"
       RATELIMIT_STORAGE_URI: "${RATELIMIT_STORAGE_URI:-redis://redis:6379/0}"
       APP_BASE_URL: "${APP_BASE_URL:-https://invubi.pt}"
+      MAIL_SERVER: "${MAIL_SERVER:-smtp.resend.com}"
+      MAIL_PORT: "${MAIL_PORT:-587}"
+      MAIL_USE_TLS: "${MAIL_USE_TLS:-true}"
+      MAIL_USE_SSL: "${MAIL_USE_SSL:-false}"
+      MAIL_USERNAME: "${MAIL_USERNAME:-resend}"
+      MAIL_PASSWORD: "${MAIL_PASSWORD:?MAIL_PASSWORD is required}"
+      MAIL_DEFAULT_SENDER: "${MAIL_DEFAULT_SENDER:-InvUBI <sistema@mail.invubi.pt>}"
 
   frontend:
     environment:
