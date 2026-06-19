@@ -27,7 +27,12 @@ from app.security.totp_secrets import (
     decrypt_totp_secret,
     encrypt_totp_secret,
 )
-from app.services import mfa_recovery_service, mfa_service, session_service
+from app.services import (
+    email_service,
+    mfa_recovery_service,
+    mfa_service,
+    session_service,
+)
 from app.utils.audit import log_action
 
 logger = logging.getLogger(__name__)
@@ -237,6 +242,12 @@ def complete_reconfiguration(
             user_id,
         )
         return False, "Não foi possível concluir a reconfiguração MFA.", None, True
+
+    if not email_service.send_mfa_reconfiguration_email(user.email):
+        logger.warning(
+            "Não foi possível enviar notificação de reconfiguração MFA ao utilizador %s.",
+            user.user_id,
+        )
 
     return True, "Autenticador reconfigurado com sucesso.", recovery_code, False
 

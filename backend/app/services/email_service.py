@@ -379,3 +379,50 @@ def send_administrative_mfa_reset_email(to_email: str) -> bool:
     )
 
     return _send_message(msg, "administrative_mfa_reset")
+
+
+def send_mfa_recovery_email(to_email: str) -> bool:
+    msg = Message(
+        subject="[InvUBI] Autenticador removido por recuperação",
+        recipients=[to_email],
+        body=(
+            "O autenticador da sua conta InvUBI foi removido após a utilização "
+            "de um código de recuperação.\n\n"
+            "Todas as sessões ativas foram encerradas. No próximo login será "
+            "obrigatório configurar um novo autenticador.\n\n"
+            "Se não realizou esta ação, contacte imediatamente o administrador."
+        ),
+        html=_render_email_html(
+            title="Autenticador removido por recuperação",
+            paragraphs=[
+                "O autenticador da sua conta InvUBI foi removido após a utilização de um código de recuperação.",
+                "Todas as sessões ativas foram encerradas. No próximo login será obrigatório configurar um novo autenticador.",
+            ],
+            security_notice="Se não realizou esta ação, contacte imediatamente o administrador.",
+        ),
+    )
+
+    return _send_message(msg, "mfa_recovery")
+
+
+def send_mfa_reconfiguration_email(to_email: str) -> bool:
+    msg = Message(
+        subject="[InvUBI] Autenticador reconfigurado",
+        recipients=[to_email],
+        body=(
+            "O autenticador da sua conta InvUBI foi reconfigurado com sucesso.\n\n"
+            "O código de recuperação anterior foi invalidado e foi gerado um novo código. "
+            "Todas as sessões ativas foram encerradas. Inicie sessão novamente.\n\n"
+            "Se não realizou esta ação, contacte imediatamente o administrador."
+        ),
+        html=_render_email_html(
+            title="Autenticador reconfigurado",
+            paragraphs=[
+                "O autenticador da sua conta InvUBI foi reconfigurado com sucesso.",
+                "O código de recuperação anterior foi invalidado e foi gerado um novo código. Todas as sessões ativas foram encerradas. Inicie sessão novamente.",
+            ],
+            security_notice="Se não realizou esta ação, contacte imediatamente o administrador.",
+        ),
+    )
+
+    return _send_message(msg, "mfa_reconfiguration")
