@@ -62,6 +62,8 @@ def test_send_registration_email_returns_true_when_delivery_succeeds(monkeypatch
             "new@ubi.pt", "old@ubi.pt"
         ),
         lambda: email_service.send_administrative_mfa_reset_email("user@ubi.pt"),
+        lambda: email_service.send_mfa_recovery_email("user@ubi.pt"),
+        lambda: email_service.send_mfa_reconfiguration_email("user@ubi.pt"),
     ],
 )
 def test_all_email_templates_use_the_standard_layout(monkeypatch, send_email):
@@ -154,6 +156,32 @@ def test_email_subjects_distinguish_password_reset_from_password_change(monkeypa
     password_reset, password_change = sent_messages
     assert password_reset.subject == "[InvUBI] Palavra-passe redefinida"
     assert password_change.subject == "[InvUBI] Palavra-passe alterada"
+
+
+def test_mfa_security_notifications_do_not_include_secrets(monkeypatch):
+    app = make_app()
+    sent_messages = []
+    monkeypatch.setattr(
+        email_service.mail,
+        "send",
+        lambda message: sent_messages.append(message),
+    )
+
+    with app.app_context():
+        email_service.send_mfa_recovery_email("user@ubi.pt")
+        email_service.send_mfa_reconfiguration_email("user@ubi.pt")
+
+    recovery, reconfiguration = sent_messages
+    assert recovery.subject == "[InvUBI] Autenticador removido por recuperação"
+    assert reconfiguration.subject == "[InvUBI] Autenticador reconfigurado"
+
+    for message in sent_messages:
+        content = f"{message.body}\n{message.html}".lower()
+        assert "recovery_code" not in content
+        assert "totp" not in content
+        assert "otpauth://" not in content
+        assert "argon" not in content
+        assert "totp:v1" not in content
 
 
 def test_action_template_escapes_dynamic_url(monkeypatch):

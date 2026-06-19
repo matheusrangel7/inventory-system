@@ -307,6 +307,7 @@ def test_complete_rotates_mfa_recovery_code_and_sessions_atomically(monkeypatch)
     ]
     session = FakeSession(results=[user, pending, sessions])
     audit_calls = []
+    notifications = []
     monkeypatch.setattr(
         mfa_reconfiguration_service,
         "db",
@@ -334,6 +335,11 @@ def test_complete_rotates_mfa_recovery_code_and_sessions_atomically(monkeypatch)
         "log_action",
         lambda **kwargs: audit_calls.append(kwargs),
     )
+    monkeypatch.setattr(
+        mfa_reconfiguration_service.email_service,
+        "send_mfa_reconfiguration_email",
+        lambda email: notifications.append((session.committed, email)) or True,
+    )
 
     ok, message, recovery_code, step_valid = (
         mfa_reconfiguration_service.complete_reconfiguration(
@@ -355,6 +361,7 @@ def test_complete_rotates_mfa_recovery_code_and_sessions_atomically(monkeypatch)
     assert all(item.revoked and item.revoked_at for item in sessions)
     assert session.deleted == [pending]
     assert session.committed
+    assert notifications == [(True, user.email)]
     assert audit_calls[0]["new_value"] == {
         "mfa_enabled": True,
         "mfa_reconfigured": True,
@@ -365,18 +372,75 @@ def test_complete_rotates_mfa_recovery_code_and_sessions_atomically(monkeypatch)
     assert "ABCD-EFGH-JKLM-NPQR" not in str(audit_calls)
 
 
+def test_reconfiguration_email_failure_does_not_rollback_completion(monkeypatch):
+    user = make_user()
+    pending = make_pending()
+    sessions = [SimpleNamespace(revoked=False, revoked_at=None)]
+    session = FakeSession(results=[user, pending, sessions])
+    monkeypatch.setattr(
+        mfa_reconfiguration_service,
+        "db",
+        SimpleNamespace(session=session),
+    )
+    monkeypatch.setattr(
+        mfa_reconfiguration_service.session_service,
+        "db",
+        SimpleNamespace(session=session),
+    )
+    install_totp(monkeypatch)
+    monkeypatch.setattr(
+        mfa_reconfiguration_service.mfa_recovery_service,
+        "apply_recovery_code",
+        lambda user_id: "ABCD-EFGH-JKLM-NPQR",
+    )
+    monkeypatch.setattr(
+        mfa_reconfiguration_service,
+        "log_action",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(
+        mfa_reconfiguration_service.email_service,
+        "send_mfa_reconfiguration_email",
+        lambda email: False,
+    )
+
+    ok, _, recovery_code, step_valid = (
+        mfa_reconfiguration_service.complete_reconfiguration(
+            user.user_id,
+            pending.reconfiguration_id,
+            "654321",
+            mfa_reconfiguration_service._fingerprint(user.password_hash),
+            mfa_reconfiguration_service._fingerprint(user.totp_secret_encrypted),
+        )
+    )
+
+    assert ok
+    assert recovery_code == "ABCD-EFGH-JKLM-NPQR"
+    assert not step_valid
+    assert session.committed
+    assert not session.rolled_back
+    assert session.deleted == [pending]
+    assert user.totp_secret_encrypted == "active-envelope-new"
+
+
 def test_invalid_new_totp_preserves_old_authenticator_and_recovery_code(
     monkeypatch,
 ):
     user = make_user()
     pending = make_pending()
     session = FakeSession(results=[user, pending])
+    notifications = []
     monkeypatch.setattr(
         mfa_reconfiguration_service,
         "db",
         SimpleNamespace(session=session),
     )
     install_totp(monkeypatch, pending_valid=False)
+    monkeypatch.setattr(
+        mfa_reconfiguration_service.email_service,
+        "send_mfa_reconfiguration_email",
+        lambda email: notifications.append(email) or True,
+    )
 
     ok, message, recovery_code, step_valid = (
         mfa_reconfiguration_service.complete_reconfiguration(
@@ -396,6 +460,7 @@ def test_invalid_new_totp_preserves_old_authenticator_and_recovery_code(
     assert user.mfa_recovery_code_hash == "old-recovery-hash"
     assert session.rolled_back
     assert session.deleted == []
+    assert notifications == []
 
 
 def test_expired_or_changed_state_invalidates_confirmation(monkeypatch):
@@ -439,6 +504,7 @@ def test_transaction_failure_rolls_back_completion(monkeypatch):
     pending = make_pending()
     sessions = [SimpleNamespace(revoked=False, revoked_at=None)]
     session = FakeSession(results=[user, pending, sessions])
+    notifications = []
     monkeypatch.setattr(
         mfa_reconfiguration_service,
         "db",
@@ -460,6 +526,11 @@ def test_transaction_failure_rolls_back_completion(monkeypatch):
         "log_action",
         lambda **kwargs: (_ for _ in ()).throw(SQLAlchemyError("audit failed")),
     )
+    monkeypatch.setattr(
+        mfa_reconfiguration_service.email_service,
+        "send_mfa_reconfiguration_email",
+        lambda email: notifications.append(email) or True,
+    )
 
     ok, message, recovery_code, step_valid = (
         mfa_reconfiguration_service.complete_reconfiguration(
@@ -477,6 +548,7 @@ def test_transaction_failure_rolls_back_completion(monkeypatch):
     assert step_valid
     assert session.rolled_back
     assert not session.committed
+    assert notifications == []
 
 
 def test_active_encryption_failure_preserves_existing_mfa_state(monkeypatch):

@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from argon2.exceptions import VerifyMismatchError
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.domain.enums import RegistrationStatus
 from app.services import mfa_recovery_service, mfa_service
@@ -50,6 +51,7 @@ class FakeSession:
 def make_user():
     return SimpleNamespace(
         user_id=7,
+        email="user@example.com",
         is_active=True,
         registration_status=RegistrationStatus.COMPLETED,
         totp_secret_encrypted="totp-secret",
@@ -183,6 +185,7 @@ def test_recover_authenticator_consumes_code_and_revokes_sessions(monkeypatch):
     ]
     session = FakeSession(results=[user, sessions])
     audit_calls = []
+    notifications = []
     monkeypatch.setattr(
         mfa_recovery_service,
         "db",
@@ -208,6 +211,11 @@ def test_recover_authenticator_consumes_code_and_revokes_sessions(monkeypatch):
         "log_action",
         lambda **kwargs: audit_calls.append(kwargs),
     )
+    monkeypatch.setattr(
+        mfa_recovery_service.email_service,
+        "send_mfa_recovery_email",
+        lambda email: notifications.append((session.committed, email)) or True,
+    )
 
     ok, message = mfa_recovery_service.recover_authenticator(
         user.user_id,
@@ -221,6 +229,7 @@ def test_recover_authenticator_consumes_code_and_revokes_sessions(monkeypatch):
     assert user.mfa_recovery_code_hash is None
     assert all(item.revoked and item.revoked_at for item in sessions)
     assert session.committed
+    assert notifications == [(True, user.email)]
     assert audit_calls[0]["new_value"] == {
         "mfa_enabled": False,
         "mfa_recovery_used": True,
@@ -229,9 +238,91 @@ def test_recover_authenticator_consumes_code_and_revokes_sessions(monkeypatch):
     assert "recovery_code" not in str(audit_calls)
 
 
+def test_recovery_email_failure_does_not_rollback_successful_recovery(monkeypatch):
+    user = make_user()
+    sessions = [SimpleNamespace(revoked=False, revoked_at=None)]
+    session = FakeSession(results=[user, sessions])
+    monkeypatch.setattr(
+        mfa_recovery_service,
+        "db",
+        SimpleNamespace(session=session),
+    )
+    monkeypatch.setattr(
+        mfa_recovery_service.session_service,
+        "db",
+        SimpleNamespace(session=session),
+    )
+    monkeypatch.setattr(
+        mfa_recovery_service,
+        "ph",
+        SimpleNamespace(verify=lambda stored_hash, value: True),
+    )
+    monkeypatch.setattr(mfa_recovery_service, "log_action", lambda **kwargs: None)
+    monkeypatch.setattr(
+        mfa_recovery_service.email_service,
+        "send_mfa_recovery_email",
+        lambda email: False,
+    )
+
+    ok, _ = mfa_recovery_service.recover_authenticator(
+        user.user_id,
+        "ABCD-EFGH-JKLM-NPQR",
+    )
+
+    assert ok
+    assert session.committed
+    assert not session.rolled_back
+    assert user.totp_secret_encrypted is None
+    assert user.mfa_enabled is False
+
+
+def test_recovery_does_not_notify_when_transaction_fails(monkeypatch):
+    user = make_user()
+    sessions = [SimpleNamespace(revoked=False, revoked_at=None)]
+    session = FakeSession(results=[user, sessions])
+    notifications = []
+    monkeypatch.setattr(
+        mfa_recovery_service,
+        "db",
+        SimpleNamespace(session=session),
+    )
+    monkeypatch.setattr(
+        mfa_recovery_service.session_service,
+        "db",
+        SimpleNamespace(session=session),
+    )
+    monkeypatch.setattr(
+        mfa_recovery_service,
+        "ph",
+        SimpleNamespace(verify=lambda stored_hash, value: True),
+    )
+    monkeypatch.setattr(
+        mfa_recovery_service,
+        "log_action",
+        lambda **kwargs: (_ for _ in ()).throw(SQLAlchemyError("audit failed")),
+    )
+    monkeypatch.setattr(
+        mfa_recovery_service.email_service,
+        "send_mfa_recovery_email",
+        lambda email: notifications.append(email) or True,
+    )
+
+    ok, message = mfa_recovery_service.recover_authenticator(
+        user.user_id,
+        "ABCD-EFGH-JKLM-NPQR",
+    )
+
+    assert not ok
+    assert message == "Não foi possível recuperar o acesso ao autenticador."
+    assert session.rolled_back
+    assert not session.committed
+    assert notifications == []
+
+
 def test_invalid_recovery_code_does_not_change_user(monkeypatch):
     user = make_user()
     session = FakeSession(results=[user])
+    notifications = []
     monkeypatch.setattr(
         mfa_recovery_service,
         "db",
@@ -246,6 +337,11 @@ def test_invalid_recovery_code_does_not_change_user(monkeypatch):
         "ph",
         SimpleNamespace(verify=reject),
     )
+    monkeypatch.setattr(
+        mfa_recovery_service.email_service,
+        "send_mfa_recovery_email",
+        lambda email: notifications.append(email) or True,
+    )
 
     ok, message = mfa_recovery_service.recover_authenticator(
         user.user_id,
@@ -259,6 +355,7 @@ def test_invalid_recovery_code_does_not_change_user(monkeypatch):
     assert user.mfa_recovery_code_hash == "argon-hash"
     assert session.rolled_back
     assert not session.committed
+    assert notifications == []
 
 
 def test_consumed_recovery_code_cannot_be_reused(monkeypatch):
