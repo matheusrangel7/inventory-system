@@ -1,3 +1,4 @@
+import logging
 import secrets
 
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
@@ -8,11 +9,12 @@ from app.constants import MFA_RECOVERY_CODE_LENGTH
 from app.domain.enums import RegistrationStatus
 from app.extensions import db, ph
 from app.models.user import User
-from app.services import session_service
+from app.services import email_service, session_service
 from app.utils.audit import log_action
 
 RECOVERY_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 INVALID_RECOVERY_CODE_MESSAGE = "Código de recuperação inválido."
+logger = logging.getLogger(__name__)
 
 
 def normalize_recovery_code(code: str) -> str:
@@ -99,5 +101,11 @@ def recover_authenticator(user_id: int, code: str) -> tuple[bool, str]:
     except SQLAlchemyError:
         db.session.rollback()
         return False, "Não foi possível recuperar o acesso ao autenticador."
+
+    if not email_service.send_mfa_recovery_email(user.email):
+        logger.warning(
+            "Não foi possível enviar notificação de recuperação MFA ao utilizador %s.",
+            user.user_id,
+        )
 
     return True, "Autenticador desvinculado com sucesso."
