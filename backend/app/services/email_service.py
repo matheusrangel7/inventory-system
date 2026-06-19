@@ -4,6 +4,8 @@ from flask import current_app
 from flask_mail import Message
 from app.extensions import mail
 
+_TEXT_FOOTER = "Este email foi enviado automaticamente pelo InvUBI."
+
 
 def _mask_email(email: str) -> str:
     if not email or "@" not in email:
@@ -19,6 +21,9 @@ def _mask_email(email: str) -> str:
 
 def _send_message(msg: Message, event: str) -> bool:
     recipient = msg.recipients[0] if msg.recipients else ""
+    if msg.body and not msg.body.rstrip().endswith(_TEXT_FOOTER):
+        msg.body = f"{msg.body.rstrip()}\n\n{_TEXT_FOOTER}"
+
     try:
         mail.send(msg)
         return True
@@ -30,6 +35,74 @@ def _send_message(msg: Message, event: str) -> bool:
             type(exc).__name__,
         )
         return False
+
+
+def _render_email_html(
+    *,
+    title: str,
+    paragraphs: list[str],
+    action_label: str | None = None,
+    action_url: str | None = None,
+    details: list[tuple[str, str]] | None = None,
+    security_notice: str | None = None,
+) -> str:
+    paragraph_html = "".join(
+        f'<p style="margin:0 0 16px;color:#1f2937;font-size:16px;line-height:24px;">'
+        f"{escape(str(paragraph))}</p>"
+        for paragraph in paragraphs
+    )
+
+    details_html = ""
+    if details:
+        rows = "".join(
+            "<tr>"
+            f'<td style="padding:8px 12px 8px 0;color:#374151;font-weight:700;vertical-align:top;">{escape(str(label))}</td>'
+            f'<td style="padding:8px 0;color:#1f2937;vertical-align:top;">{escape(str(value))}</td>'
+            "</tr>"
+            for label, value in details
+        )
+        details_html = (
+            '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
+            'style="margin:0 0 20px;border-collapse:collapse;background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;">'
+            f'<tbody>{rows}</tbody></table>'
+        )
+
+    action_html = ""
+    if action_label and action_url:
+        safe_url = escape(action_url, quote=True)
+        action_html = (
+            '<p style="margin:0 0 20px;">'
+            f'<a href="{safe_url}" style="display:inline-block;background:#2563eb;color:#ffffff;'
+            'padding:12px 20px;border-radius:6px;font-size:16px;font-weight:700;text-decoration:none;">'
+            f"{escape(action_label)}</a></p>"
+            '<p style="margin:0 0 16px;color:#4b5563;font-size:14px;line-height:20px;">'
+            "Se o botão não funcionar, copie e cole este link no navegador:<br>"
+            f'<a href="{safe_url}" style="color:#1d4ed8;word-break:break-all;">{safe_url}</a></p>'
+        )
+
+    notice_html = ""
+    if security_notice:
+        notice_html = (
+            '<p style="margin:0 0 16px;padding:12px 14px;background:#fef2f2;color:#991b1b;'
+            'border-left:4px solid #dc2626;font-size:14px;line-height:20px;">'
+            f"{escape(security_notice)}</p>"
+        )
+
+    return (
+        '<!doctype html><html lang="pt-PT"><body style="margin:0;padding:0;background:#f3f4f6;">'
+        '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f4f6;">'
+        '<tr><td style="padding:32px 16px;">'
+        '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" '
+        'style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;">'
+        '<tr><td style="padding:24px 32px;background:#1e3a8a;color:#ffffff;font-family:Arial,sans-serif;'
+        'font-size:28px;font-weight:700;letter-spacing:1px;">InvUBI</td></tr>'
+        '<tr><td style="padding:32px;font-family:Arial,sans-serif;">'
+        f'<h1 style="margin:0 0 20px;color:#1e3a8a;font-size:24px;line-height:32px;">{escape(title)}</h1>'
+        f"{paragraph_html}{details_html}{action_html}{notice_html}"
+        '<p style="margin:24px 0 0;color:#6b7280;font-size:12px;line-height:18px;">'
+        "Este email foi enviado automaticamente pelo InvUBI.</p>"
+        '</td></tr></table></td></tr></table></body></html>'
+    )
 
 
 def send_registration_email(to_email: str, token: str) -> bool:
@@ -44,19 +117,19 @@ def send_registration_email(to_email: str, token: str) -> bool:
         # Corpo em texto simples (para clientes sem suporte HTML)
         body=(
             f"Foi criada uma conta para si no Sistema de Gestão de Inventário.\n\n"
-            f"Para concluir o registo e definir a sua password, aceda ao link:\n"
+            f"Para concluir o registo e definir a sua palavra-passe, aceda ao link:\n"
             f"{link}\n\n"
             f"Se não solicitou este acesso, ignore este email."
         ),
-        # Corpo HTML
-        html=(
-            f"<p>Foi criada uma conta para si no <strong>Sistema de Gestão de Inventário</strong>.</p>"
-            f"<p>Para concluir o registo e definir a sua password, clique no botão abaixo:</p>"
-            f'<p><a href="{link}" '
-            f'style="background:#2563eb;color:white;padding:10px 20px;'
-            f'text-decoration:none;border-radius:5px;">Concluir Registo</a></p>'
-            f"<p>Ou copie o link: <code>{link}</code></p>"
-            f"<small>Se não solicitou este acesso, ignore este email.</small>"
+        html=_render_email_html(
+            title="Concluir registo",
+            paragraphs=[
+                "Foi criada uma conta para si no Sistema de Gestão de Inventário.",
+                "Para concluir o registo e definir a sua palavra-passe, utilize o botão abaixo.",
+            ],
+            action_label="Concluir registo",
+            action_url=link,
+            security_notice="Se não solicitou este acesso, ignore este email.",
         ),
     )
 
@@ -69,13 +142,10 @@ def send_maintenance_alert_email(
     serial_number: str,
     due_date_str: str,
 ) -> bool:
-    subject = f"[InvUBI] Manutenção Necessária - Asset #{asset_id}"
-    serial_number_html = escape(serial_number or "")
-    due_date_html = escape(due_date_str or "")
-
+    subject = f"[InvUBI] Manutenção necessária - Ativo #{asset_id}"
     body_text = (
         f"O seguinte equipamento atingiu o prazo de manutenção:\n\n"
-        f"Asset ID: #{asset_id}\n"
+        f"ID do ativo: #{asset_id}\n"
         f"Nº de Série: {serial_number}\n"
         f"Estado atual: Necessita Manutenção\n"
         f"Data prevista: {due_date_str}\n\n"
@@ -84,21 +154,18 @@ def send_maintenance_alert_email(
         f"Este email foi gerado automaticamente pelo InvUBI."
     )
 
-    body_html = (
-        f"<p>O seguinte equipamento atingiu o prazo de manutenção:</p>"
-        f"<table style='border-collapse:collapse;font-family:sans-serif;'>"
-        f"<tr><td style='padding:4px 12px 4px 0;font-weight:bold;'>Asset ID</td>"
-        f"<td>#{asset_id}</td></tr>"
-        f"<tr><td style='padding:4px 12px 4px 0;font-weight:bold;'>Nº de Série</td>"
-        f"<td>{serial_number_html}</td></tr>"
-        f"<tr><td style='padding:4px 12px 4px 0;font-weight:bold;'>Estado atual</td>"
-        f"<td style='color:#b45309;font-weight:bold;'>Necessita Manutenção</td></tr>"
-        f"<tr><td style='padding:4px 12px 4px 0;font-weight:bold;'>Data prevista</td>"
-        f"<td>{due_date_html}</td></tr>"
-        f"</table>"
-        f"<p>Por favor proceda à manutenção assim que possível e atualize o estado "
-        f"no <strong>sistema de inventário</strong>.</p>"
-        f"<small style='color:#6b7280;'>Este email foi gerado automaticamente pelo InvUBI.</small>"
+    body_html = _render_email_html(
+        title="Manutenção necessária",
+        paragraphs=[
+            "O seguinte equipamento atingiu o prazo de manutenção.",
+            "Por favor proceda à manutenção assim que possível e atualize o estado no sistema de inventário.",
+        ],
+        details=[
+            ("ID do ativo", f"#{asset_id}"),
+            ("Nº de Série", serial_number or ""),
+            ("Estado atual", "Necessita Manutenção"),
+            ("Data prevista", due_date_str or ""),
+        ],
     )
 
     msg = Message(
@@ -121,13 +188,13 @@ def send_admin_transfer_email(to_email: str) -> bool:
         "Se não esperava este email, contacte o suporte."
     )
 
-    body_html = (
-        "<p>A sua conta no <strong>InvUBI</strong> foi promovida a "
-        "<strong>Administrador</strong>.</p>"
-        "<p>Já tem acesso completo ao sistema de inventário.<br>"
-        "Por favor faça login para continuar.</p>"
-        "<p style='color:#6b7280;font-size:0.875rem;'>"
-        "Se não esperava este email, contacte o suporte.</p>"
+    body_html = _render_email_html(
+        title="Promoção a administrador",
+        paragraphs=[
+            "A sua conta no InvUBI foi promovida a Administrador.",
+            "Já tem acesso completo ao sistema de inventário. Por favor faça login para continuar.",
+        ],
+        security_notice="Se não esperava este email, contacte o suporte.",
     )
 
     msg = Message(
@@ -148,10 +215,12 @@ def send_admin_demoted_email(to_email: str) -> bool:
             "A sua conta no InvUBI passou de Administrador para Gestor.\n\n"
             "Por segurança, será necessário iniciar sessão novamente."
         ),
-        html=(
-            "<p>A sua conta no <strong>InvUBI</strong> passou de "
-            "<strong>Administrador</strong> para <strong>Gestor</strong>.</p>"
-            "<p>Por segurança, será necessário iniciar sessão novamente.</p>"
+        html=_render_email_html(
+            title="Alteração de perfil",
+            paragraphs=[
+                "A sua conta no InvUBI passou de Administrador para Gestor.",
+                "Por segurança, será necessário iniciar sessão novamente.",
+            ],
         ),
     )
 
@@ -172,16 +241,15 @@ def send_password_reset_email(to_email: str, token: str) -> bool:
             "O link é válido durante 30 minutos e só pode ser utilizado uma vez.\n"
             "Se não efetuou este pedido, ignore este email."
         ),
-        html=(
-            "<p>Foi solicitada a recuperação da palavra-passe da sua conta "
-            "no <strong>InvUBI</strong>.</p>"
-            f'<p><a href="{link}" '
-            "style=\"background:#1e3a8a;color:white;padding:10px 20px;"
-            "text-decoration:none;border-radius:5px;\">"
-            "Definir nova palavra-passe</a></p>"
-            "<p>O link é válido durante 30 minutos e só pode ser utilizado "
-            "uma vez.</p>"
-            "<small>Se não efetuou este pedido, ignore este email.</small>"
+        html=_render_email_html(
+            title="Recuperação de palavra-passe",
+            paragraphs=[
+                "Foi solicitada a recuperação da palavra-passe da sua conta no InvUBI.",
+                "O link é válido durante 30 minutos e só pode ser utilizado uma vez.",
+            ],
+            action_label="Definir nova palavra-passe",
+            action_url=link,
+            security_notice="Se não efetuou este pedido, ignore este email.",
         ),
     )
 
@@ -190,7 +258,7 @@ def send_password_reset_email(to_email: str, token: str) -> bool:
 
 def send_password_reset_confirmation_email(to_email: str) -> bool:
     msg = Message(
-        subject="[InvUBI] Palavra-passe alterada",
+        subject="[InvUBI] Palavra-passe redefinida",
         recipients=[to_email],
         body=(
             "A palavra-passe da sua conta InvUBI foi redefinida.\n\n"
@@ -198,13 +266,13 @@ def send_password_reset_confirmation_email(to_email: str) -> bool:
             "com a nova palavra-passe.\n\n"
             "Se não realizou esta alteração, contacte imediatamente o suporte."
         ),
-        html=(
-            "<p>A palavra-passe da sua conta <strong>InvUBI</strong> foi "
-            "redefinida.</p>"
-            "<p>Todas as sessões ativas foram encerradas. Inicie sessão "
-            "novamente com a nova palavra-passe.</p>"
-            "<p style='color:#991b1b;'>Se não realizou esta alteração, "
-            "contacte imediatamente o suporte.</p>"
+        html=_render_email_html(
+            title="Palavra-passe redefinida",
+            paragraphs=[
+                "A palavra-passe da sua conta InvUBI foi redefinida.",
+                "Todas as sessões ativas foram encerradas. Inicie sessão novamente com a nova palavra-passe.",
+            ],
+            security_notice="Se não realizou esta alteração, contacte imediatamente o suporte.",
         ),
     )
 
@@ -221,13 +289,13 @@ def send_password_change_confirmation_email(to_email: str) -> bool:
             "com a nova palavra-passe.\n\n"
             "Se não realizou esta alteração, contacte imediatamente o suporte."
         ),
-        html=(
-            "<p>A palavra-passe da sua conta <strong>InvUBI</strong> foi "
-            "alterada.</p>"
-            "<p>Todas as sessões ativas foram encerradas. Inicie sessão "
-            "novamente com a nova palavra-passe.</p>"
-            "<p style='color:#991b1b;'>Se não realizou esta alteração, "
-            "contacte imediatamente o suporte.</p>"
+        html=_render_email_html(
+            title="Palavra-passe alterada",
+            paragraphs=[
+                "A palavra-passe da sua conta InvUBI foi alterada.",
+                "Todas as sessões ativas foram encerradas. Inicie sessão novamente com a nova palavra-passe.",
+            ],
+            security_notice="Se não realizou esta alteração, contacte imediatamente o suporte.",
         ),
     )
 
@@ -238,7 +306,6 @@ def send_recovery_email_changed_old_address(
     old_email: str,
     new_email: str,
 ) -> bool:
-    safe_new_email = escape(new_email)
     msg = Message(
         subject="[InvUBI] Email da conta alterado",
         recipients=[old_email],
@@ -249,13 +316,14 @@ def send_recovery_email_changed_old_address(
             "Todas as sessões ativas foram encerradas. Se não reconhece esta "
             "alteração, contacte imediatamente o administrador."
         ),
-        html=(
-            "<p>O email de acesso à sua conta <strong>InvUBI</strong> foi "
-            "alterado por um administrador.</p>"
-            f"<p>Novo email: <strong>{safe_new_email}</strong></p>"
-            "<p>Todas as sessões ativas foram encerradas.</p>"
-            "<p style='color:#991b1b;'>Se não reconhece esta alteração, "
-            "contacte imediatamente o administrador.</p>"
+        html=_render_email_html(
+            title="Email da conta alterado",
+            paragraphs=[
+                "O email de acesso à sua conta InvUBI foi alterado por um administrador.",
+                "Todas as sessões ativas foram encerradas.",
+            ],
+            details=[("Novo email", new_email)],
+            security_notice="Se não reconhece esta alteração, contacte imediatamente o administrador.",
         ),
     )
 
@@ -266,7 +334,6 @@ def send_recovery_email_changed_new_address(
     new_email: str,
     old_email: str,
 ) -> bool:
-    safe_old_email = escape(old_email)
     msg = Message(
         subject="[InvUBI] Novo email de acesso",
         recipients=[new_email],
@@ -277,12 +344,13 @@ def send_recovery_email_changed_new_address(
             "Todas as sessões ativas foram encerradas. Utilize este endereço "
             "no próximo login."
         ),
-        html=(
-            "<p>Este endereço passou a ser o email de acesso à sua conta "
-            "<strong>InvUBI</strong> após uma recuperação administrativa.</p>"
-            f"<p>Email anterior: <strong>{safe_old_email}</strong></p>"
-            "<p>Todas as sessões ativas foram encerradas. Utilize este "
-            "endereço no próximo login.</p>"
+        html=_render_email_html(
+            title="Novo email de acesso",
+            paragraphs=[
+                "Este endereço passou a ser o email de acesso à sua conta InvUBI após uma recuperação administrativa.",
+                "Todas as sessões ativas foram encerradas. Utilize este endereço no próximo login.",
+            ],
+            details=[("Email anterior", old_email)],
         ),
     )
 
@@ -300,13 +368,13 @@ def send_administrative_mfa_reset_email(to_email: str) -> bool:
             "obrigatório configurar um novo autenticador.\n\n"
             "Se não reconhece esta ação, contacte imediatamente o administrador."
         ),
-        html=(
-            "<p>O autenticador da sua conta <strong>InvUBI</strong> foi "
-            "redefinido por um administrador.</p>"
-            "<p>Todas as sessões ativas foram encerradas. No próximo login "
-            "será obrigatório configurar um novo autenticador.</p>"
-            "<p style='color:#991b1b;'>Se não reconhece esta ação, contacte "
-            "imediatamente o administrador.</p>"
+        html=_render_email_html(
+            title="Autenticador redefinido",
+            paragraphs=[
+                "O autenticador da sua conta InvUBI foi redefinido por um administrador.",
+                "Todas as sessões ativas foram encerradas. No próximo login será obrigatório configurar um novo autenticador.",
+            ],
+            security_notice="Se não reconhece esta ação, contacte imediatamente o administrador.",
         ),
     )
 
