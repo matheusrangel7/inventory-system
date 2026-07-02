@@ -3,6 +3,7 @@ import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
+from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -138,6 +139,22 @@ def complete_password_reset(token: str, new_password: str) -> tuple[bool, str]:
         ):
             db.session.rollback()
             return False, INVALID_TOKEN_MESSAGE
+
+        try:
+            password_unchanged = ph.verify(user.password_hash, new_password)
+        except VerifyMismatchError:
+            password_unchanged = False
+        except (VerificationError, InvalidHashError):
+            db.session.rollback()
+            logger.error(
+                "Hash de password inválido ao redefinir password do utilizador %s.",
+                user.user_id,
+            )
+            return False, "Não foi possível redefinir a palavra-passe."
+
+        if password_unchanged:
+            db.session.rollback()
+            return False, "A nova palavra-passe deve ser diferente da atual."
 
         user.password_hash = ph.hash(new_password)
         reset_token.used_at = now

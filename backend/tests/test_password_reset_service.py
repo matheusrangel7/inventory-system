@@ -177,7 +177,10 @@ def test_complete_reset_changes_password_and_revokes_sessions(monkeypatch):
     monkeypatch.setattr(
         password_reset_service,
         "ph",
-        SimpleNamespace(hash=lambda password: f"hashed:{password}"),
+        SimpleNamespace(
+            verify=lambda password_hash, password: False,
+            hash=lambda password: f"hashed:{password}",
+        ),
     )
     monkeypatch.setattr(
         password_reset_service,
@@ -206,6 +209,63 @@ def test_complete_reset_changes_password_and_revokes_sessions(monkeypatch):
         "sessions_revoked": True,
     }
     assert confirmation_calls == [user.email]
+
+
+def test_complete_reset_rejects_current_password(monkeypatch):
+    user = make_user()
+    reset_token = make_reset_token(
+        token_hash=password_reset_service._hash_token("valid-token")
+    )
+    session = FakeSession([reset_token, user])
+
+    monkeypatch.setattr(
+        password_reset_service,
+        "db",
+        SimpleNamespace(session=session),
+    )
+    monkeypatch.setattr(
+        password_reset_service,
+        "ph",
+        SimpleNamespace(
+            verify=lambda password_hash, password: True,
+            hash=lambda password: (_ for _ in ()).throw(
+                AssertionError("password must not be rehashed")
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        password_reset_service.session_service,
+        "apply_revoke_all_sessions",
+        lambda user_id: (_ for _ in ()).throw(
+            AssertionError("sessions must not be revoked")
+        ),
+    )
+    monkeypatch.setattr(
+        password_reset_service,
+        "log_action",
+        lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("audit log must not be created")
+        ),
+    )
+    monkeypatch.setattr(
+        password_reset_service.email_service,
+        "send_password_reset_confirmation_email",
+        lambda email: (_ for _ in ()).throw(
+            AssertionError("email must not be sent")
+        ),
+    )
+
+    ok, message = password_reset_service.complete_password_reset(
+        "valid-token",
+        "PasswordAtual1",
+    )
+
+    assert not ok
+    assert message == "A nova palavra-passe deve ser diferente da atual."
+    assert user.password_hash == "old-hash"
+    assert reset_token.used_at is None
+    assert session.rolled_back
+    assert not session.committed
 
 
 def test_consumed_token_cannot_be_reused(monkeypatch):
