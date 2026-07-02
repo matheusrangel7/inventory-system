@@ -553,14 +553,11 @@ def _send_transfer_notification(
     try:
         if not send_email(email):
             logger.warning(
-                "Email de %s não enviado para %s após transferência "
-                "de administração.",
+                "Email de %s não enviado após transferência de administração.",
                 event,
-                email,
             )
     except Exception:
         logger.exception(
-            "Falha inesperada ao enviar email de %s para %s.",
+            "Falha inesperada ao enviar email de %s.",
             event,
-            email,
         )
