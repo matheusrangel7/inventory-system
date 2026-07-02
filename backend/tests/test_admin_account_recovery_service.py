@@ -195,7 +195,7 @@ def test_email_change_is_atomic_and_notifies_both_addresses_after_commit(
     monkeypatch,
 ):
     target = make_target()
-    reset_token = SimpleNamespace(used_at=None)
+    reset_token = SimpleNamespace()
     events = []
     session = FakeSession([target, None, reset_token], events=events)
     install_confirmation(monkeypatch)
@@ -229,7 +229,7 @@ def test_email_change_is_atomic_and_notifies_both_addresses_after_commit(
     assert status == 200
     assert user is target
     assert target.email == "novo.gestor@ubi.pt"
-    assert reset_token.used_at is not None
+    assert session.deleted == [reset_token]
     assert revoked_users == [target.user_id]
     assert events[0] == "commit"
     assert events[1:] == [

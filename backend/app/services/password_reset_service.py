@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.constants import PASSWORD_RESET_TOKEN_MINUTES
 from app.domain.enums import RegistrationStatus
 from app.extensions import db, ph
-from app.models.password_reset_token import PasswordResetToken
+from app.models.password_reset_request import PasswordResetRequest
 from app.models.user import User
 from app.services import email_service, session_service
 from app.services.password_service import validate_password
@@ -35,13 +35,13 @@ def issue_password_reset_token(user: User) -> str:
     token_hash = _hash_token(raw_token)
 
     reset_token = db.session.execute(
-        select(PasswordResetToken)
-        .where(PasswordResetToken.user_id == user.user_id)
+        select(PasswordResetRequest)
+        .where(PasswordResetRequest.user_id == user.user_id)
         .with_for_update()
     ).scalar_one_or_none()
 
     if reset_token is None:
-        reset_token = PasswordResetToken(
+        reset_token = PasswordResetRequest(
             user_id=user.user_id,
             token_hash=token_hash,
         )
@@ -53,7 +53,6 @@ def issue_password_reset_token(user: User) -> str:
     reset_token.expires_at = now + timedelta(
         minutes=PASSWORD_RESET_TOKEN_MINUTES
     )
-    reset_token.used_at = None
     return raw_token
 
 
@@ -94,10 +93,9 @@ def is_reset_token_valid(token: str) -> bool:
 
     now = datetime.now(timezone.utc)
     reset_token = db.session.execute(
-        select(PasswordResetToken).where(
-            PasswordResetToken.token_hash == _hash_token(token),
-            PasswordResetToken.used_at.is_(None),
-            PasswordResetToken.expires_at > now,
+        select(PasswordResetRequest).where(
+            PasswordResetRequest.token_hash == _hash_token(token),
+            PasswordResetRequest.expires_at > now,
         )
     ).scalar_one_or_none()
 
@@ -113,16 +111,12 @@ def complete_password_reset(token: str, new_password: str) -> tuple[bool, str]:
 
     try:
         reset_token = db.session.execute(
-            select(PasswordResetToken)
-            .where(PasswordResetToken.token_hash == _hash_token(token))
+            select(PasswordResetRequest)
+            .where(PasswordResetRequest.token_hash == _hash_token(token))
             .with_for_update()
         ).scalar_one_or_none()
 
-        if (
-            not reset_token
-            or reset_token.used_at is not None
-            or reset_token.expires_at <= now
-        ):
+        if not reset_token or reset_token.expires_at <= now:
             db.session.rollback()
             return False, INVALID_TOKEN_MESSAGE
 
@@ -157,7 +151,7 @@ def complete_password_reset(token: str, new_password: str) -> tuple[bool, str]:
             return False, "A nova palavra-passe deve ser diferente da atual."
 
         user.password_hash = ph.hash(new_password)
-        reset_token.used_at = now
+        db.session.delete(reset_token)
         session_service.apply_revoke_all_sessions(user.user_id)
         log_action(
             action="UPDATE",

@@ -6,7 +6,7 @@ from argon2.exceptions import VerifyMismatchError
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.domain.enums import RegistrationStatus
-from app.models.mfa_reconfiguration import MfaReconfiguration
+from app.models.mfa_reconfiguration_request import MfaReconfigurationRequest
 from app.security.totp_secrets import (
     ACTIVE_SECRET_PURPOSE,
     PENDING_SECRET_PURPOSE,
@@ -160,7 +160,7 @@ def test_start_creates_pending_secret_without_changing_current_mfa(monkeypatch):
     assert user.totp_secret_encrypted == "active-envelope"
     assert user.mfa_enabled is True
     assert len(session.added) == 1
-    assert isinstance(session.added[0], MfaReconfiguration)
+    assert isinstance(session.added[0], MfaReconfigurationRequest)
     assert session.added[0].pending_totp_secret_encrypted == "pending-envelope-new"
     assert "pending-secret" not in session.added[0].pending_totp_secret_encrypted
     assert session.committed

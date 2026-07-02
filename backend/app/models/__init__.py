@@ -4,5 +4,5 @@ from app.models.location import Location
 from app.models.inventory import Category, Feature, Asset, AssetSpec
 from app.models.audit_log import AuditLog
 from app.models.admin_transfer import PendingAdminTransfer
-from app.models.password_reset_token import PasswordResetToken
-from app.models.mfa_reconfiguration import MfaReconfiguration
+from app.models.password_reset_request import PasswordResetRequest
+from app.models.mfa_reconfiguration_request import MfaReconfigurationRequest

@@ -28,6 +28,7 @@ class FakeSession:
     def __init__(self, results):
         self.results = iter(results)
         self.added = []
+        self.deleted = []
         self.committed = False
         self.rolled_back = False
 
@@ -36,6 +37,9 @@ class FakeSession:
 
     def add(self, value):
         self.added.append(value)
+
+    def delete(self, value):
+        self.deleted.append(value)
 
     def commit(self):
         self.committed = True
@@ -62,7 +66,6 @@ def make_reset_token(**overrides):
         "token_hash": "old-token-hash",
         "created_at": now - timedelta(minutes=5),
         "expires_at": now + timedelta(minutes=25),
-        "used_at": None,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -90,7 +93,7 @@ def test_request_returns_same_message_for_unknown_user(monkeypatch):
 
 def test_new_request_reuses_existing_user_record(monkeypatch):
     user = make_user()
-    reset_token = make_reset_token(used_at=datetime.now(timezone.utc))
+    reset_token = make_reset_token()
     session = FakeSession([user, reset_token])
     sent = []
     monkeypatch.setattr(
@@ -117,7 +120,6 @@ def test_new_request_reuses_existing_user_record(monkeypatch):
     assert reset_token.token_hash == password_reset_service._hash_token(
         "new-raw-token"
     )
-    assert reset_token.used_at is None
     assert sent == [(user.email, "new-raw-token")]
 
 
@@ -146,7 +148,6 @@ def test_issue_password_reset_token_does_not_commit_or_send_email(monkeypatch):
 
     assert raw_token == "transaction-owned-token"
     assert reset_token.token_hash == password_reset_service._hash_token(raw_token)
-    assert reset_token.used_at is None
     assert not session.committed
     assert sent == []
 
@@ -201,7 +202,7 @@ def test_complete_reset_changes_password_and_revokes_sessions(monkeypatch):
     assert ok
     assert message == "Palavra-passe redefinida com sucesso."
     assert user.password_hash == "hashed:NovaPassword1"
-    assert reset_token.used_at is not None
+    assert session.deleted == [reset_token]
     assert all(item.revoked and item.revoked_at for item in active_sessions)
     assert session.committed
     assert audit_calls[0]["new_value"] == {
@@ -263,14 +264,13 @@ def test_complete_reset_rejects_current_password(monkeypatch):
     assert not ok
     assert message == "A nova palavra-passe deve ser diferente da atual."
     assert user.password_hash == "old-hash"
-    assert reset_token.used_at is None
+    assert session.deleted == []
     assert session.rolled_back
     assert not session.committed
 
 
-def test_consumed_token_cannot_be_reused(monkeypatch):
-    reset_token = make_reset_token(used_at=datetime.now(timezone.utc))
-    session = FakeSession([reset_token])
+def test_deleted_token_cannot_be_reused(monkeypatch):
+    session = FakeSession([None])
     monkeypatch.setattr(
         password_reset_service,
         "db",
