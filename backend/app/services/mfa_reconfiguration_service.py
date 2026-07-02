@@ -18,7 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.constants import MFA_ISSUER, MFA_VALID_WINDOW, STEP_TOKEN_MINUTES
 from app.domain.enums import RegistrationStatus
 from app.extensions import db, ph
-from app.models.mfa_reconfiguration import MfaReconfiguration
+from app.models.mfa_reconfiguration_request import MfaReconfigurationRequest
 from app.models.user import User
 from app.security.totp_secrets import (
     ACTIVE_SECRET_PURPOSE,
@@ -65,13 +65,13 @@ def _get_user_for_update(user_id: int) -> User | None:
 def _get_pending_for_update(
     user_id: int,
     reconfiguration_id: int | None = None,
-) -> MfaReconfiguration | None:
-    statement = select(MfaReconfiguration).where(
-        MfaReconfiguration.user_id == user_id
+) -> MfaReconfigurationRequest | None:
+    statement = select(MfaReconfigurationRequest).where(
+        MfaReconfigurationRequest.user_id == user_id
     )
     if reconfiguration_id is not None:
         statement = statement.where(
-            MfaReconfiguration.reconfiguration_id == reconfiguration_id
+            MfaReconfigurationRequest.reconfiguration_id == reconfiguration_id
         )
     return db.session.execute(
         statement.with_for_update()
@@ -110,7 +110,7 @@ def start_reconfiguration(
         pending_secret = pyotp.random_base32()
         pending = _get_pending_for_update(user.user_id)
         if pending is None:
-            pending = MfaReconfiguration(user_id=user.user_id)
+            pending = MfaReconfigurationRequest(user_id=user.user_id)
             db.session.add(pending)
 
         pending.pending_totp_secret_encrypted = encrypt_totp_secret(

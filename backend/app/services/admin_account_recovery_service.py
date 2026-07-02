@@ -1,14 +1,12 @@
 import logging
 import re
-from datetime import datetime, timezone
-
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.domain.enums import RegistrationStatus, UserRole
 from app.extensions import db
-from app.models.mfa_reconfiguration import MfaReconfiguration
-from app.models.password_reset_token import PasswordResetToken
+from app.models.mfa_reconfiguration_request import MfaReconfigurationRequest
+from app.models.password_reset_request import PasswordResetRequest
 from app.models.user import User
 from app.services import (
     admin_confirmation_service,
@@ -126,12 +124,12 @@ def change_email(
             return _failure("Já existe um utilizador com este email.", status=409)
 
         reset_token = db.session.execute(
-            select(PasswordResetToken)
-            .where(PasswordResetToken.user_id == target.user_id)
+            select(PasswordResetRequest)
+            .where(PasswordResetRequest.user_id == target.user_id)
             .with_for_update()
         ).scalar_one_or_none()
         if reset_token is not None:
-            reset_token.used_at = datetime.now(timezone.utc)
+            db.session.delete(reset_token)
 
         target.email = normalized_email
         session_service.apply_revoke_all_sessions(target.user_id)
@@ -245,8 +243,8 @@ def reset_mfa(
 
     try:
         pending_reconfiguration = db.session.execute(
-            select(MfaReconfiguration)
-            .where(MfaReconfiguration.user_id == target.user_id)
+            select(MfaReconfigurationRequest)
+            .where(MfaReconfigurationRequest.user_id == target.user_id)
             .with_for_update()
         ).scalar_one_or_none()
         if pending_reconfiguration is not None:

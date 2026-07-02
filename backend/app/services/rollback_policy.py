@@ -18,12 +18,12 @@ USER_SECURITY_TABLES = frozenset(
     {
         "users",
         "registration_tokens",
-        "password_reset_tokens",
+        "password_reset_requests",
         "sessions",
         "user_sessions",
         "mfa",
         "mfa_recovery",
-        "mfa_reconfiguration",
+        "mfa_reconfiguration_requests",
     }
 )
 

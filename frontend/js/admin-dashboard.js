@@ -32,12 +32,12 @@ const ADMIN_ROLLBACK_SCOPE_REASON = "Rollback disponível apenas para Locais, Ca
 const USER_SECURITY_LOG_TABLES = new Set([
     "users",
     "registration_tokens",
-    "password_reset_tokens",
+    "password_reset_requests",
     "sessions",
     "user_sessions",
     "mfa",
     "mfa_recovery",
-    "mfa_reconfiguration"
+    "mfa_reconfiguration_requests"
 ]);
 const ASSET_COLUMN_STORAGE_KEY = "invubi.assets.visibleColumns.admin.v6";
 const ASSET_REQUIRED_COLUMN_KEYS = new Set(["id", "category"]);

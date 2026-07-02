@@ -48,17 +48,16 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS password_reset_tokens (
+CREATE TABLE IF NOT EXISTS password_reset_requests (
     reset_token_id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL UNIQUE,
     token_hash CHAR(64) NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMPTZ NOT NULL,
-    used_at TIMESTAMPTZ,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS mfa_reconfigurations (
+CREATE TABLE IF NOT EXISTS mfa_reconfiguration_requests (
     reconfiguration_id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL UNIQUE,
     pending_totp_secret_encrypted VARCHAR(255) NOT NULL,
