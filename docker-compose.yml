@@ -1,5 +1,13 @@
+x-local-logging: &local-logging
+  logging:
+    driver: local
+    options:
+      max-size: 10m
+      max-file: "3"
+
 services:
   db:
+    <<: *local-logging
     image: postgres:15-alpine
     restart: unless-stopped
     env_file:
@@ -23,6 +31,7 @@ services:
       start_period: 30s
 
   backend:
+    <<: *local-logging
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -43,6 +52,7 @@ services:
       POSTGRES_PASSWORD: ""
 
   frontend:
+    <<: *local-logging
     build:
       context: ./nginx
       dockerfile: Dockerfile
@@ -59,6 +69,7 @@ services:
       - ./nginx/certs:/etc/nginx/certs:ro
 
   mailhog:
+    <<: *local-logging
     image: mailhog/mailhog
     restart: unless-stopped
     ports:

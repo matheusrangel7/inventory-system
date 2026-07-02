@@ -88,7 +88,8 @@ def check_maintenance() -> int:
         db.session.commit()
         updated_count += 1
         logger.info(
-            f"[Scheduler] Email enviado para {recipient} e asset {asset.asset_id} atualizado."
+            "[Scheduler] Email enviado e asset %s atualizado.",
+            asset.asset_id,
         )
 
     return updated_count

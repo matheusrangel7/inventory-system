@@ -1,5 +1,13 @@
+x-local-logging: &local-logging
+  logging:
+    driver: local
+    options:
+      max-size: 10m
+      max-file: "3"
+
 services:
   redis:
+    <<: *local-logging
     image: redis:7-alpine
     restart: unless-stopped
     expose:
@@ -49,6 +57,7 @@ services:
       NGINX_HSTS_VALUE: "${NGINX_HSTS_VALUE:-max-age=31536000; includeSubDomains}"
 
   cloudflared:
+    <<: *local-logging
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     command:
