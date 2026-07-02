@@ -1,15 +1,11 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String
+from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.domain.enums import AdminTransferStatus
 from app.models.base import Base
-
-_TRANSFER_STATUS_VALUES = ", ".join(
-    f"'{status.value}'" for status in AdminTransferStatus
-)
 
 
 class PendingAdminTransfer(Base):
@@ -18,10 +14,6 @@ class PendingAdminTransfer(Base):
         CheckConstraint(
             "initiated_by <> target_user_id",
             name="ck_pending_admin_transfer_not_self",
-        ),
-        CheckConstraint(
-            f"status IN ({_TRANSFER_STATUS_VALUES})",
-            name="ck_pending_admin_transfer_status",
         ),
     )
 
@@ -46,7 +38,10 @@ class PendingAdminTransfer(Base):
     )
 
     status: Mapped[str] = mapped_column(
-        String(20),
+        Enum(
+            *(status.value for status in AdminTransferStatus),
+            name="admin_transfer_status_enum",
+        ),
         nullable=False,
         default=AdminTransferStatus.PENDING,
     )
