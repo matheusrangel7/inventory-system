@@ -13,6 +13,13 @@ CREATE TYPE asset_state_enum AS ENUM (
 
 CREATE TYPE audit_action_enum AS ENUM ('INSERT', 'UPDATE', 'DELETE');
 
+CREATE TYPE admin_transfer_status_enum AS ENUM (
+    'Pendente',
+    'Cancelada',
+    'Expirada',
+    'Concluída'
+);
+
 CREATE TABLE IF NOT EXISTS users (
     user_id SERIAL PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
@@ -65,9 +72,8 @@ CREATE TABLE IF NOT EXISTS pending_admin_transfer (
     initiated_by INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     target_user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    status VARCHAR(20) NOT NULL DEFAULT 'Pendente',
+    status admin_transfer_status_enum NOT NULL DEFAULT 'Pendente',
     resolved_at TIMESTAMPTZ,
-    CHECK (status IN ('Pendente', 'Cancelada', 'Expirada', 'Concluída')),
     CHECK (initiated_by <> target_user_id)
 );
 
