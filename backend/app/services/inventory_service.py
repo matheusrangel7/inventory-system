@@ -7,7 +7,7 @@ import re
 from typing import Any
 import unicodedata
 
-from sqlalchemy import Float, String, and_, cast, func, or_, select
+from sqlalchemy import Float, String, and_, case, cast, func, or_, select
 
 from app.extensions import db
 from app.models.inventory import Asset, AssetSpec, Category, Feature
@@ -1079,6 +1079,17 @@ def _apply_spec_filter(query, raw_filter: dict):
     elif feature_name:
         conditions.append(Feature.feature_name.ilike(f"%{feature_name}%"))
 
+    numeric_operators = {
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "greater_than",
+        "greater_or_equal",
+        "less_than",
+        "less_or_equal",
+    }
+
     content_text = _json_text_expression()
     if field_key:
         field_text = AssetSpec.content[_schema_field_key(field_key)].astext
@@ -1086,9 +1097,16 @@ def _apply_spec_filter(query, raw_filter: dict):
         text_for_contains = func.coalesce(field_text, "")
         numeric_source = field_text
     else:
-        comparable_content = func.lower(func.replace(content_text, '"', ''))
+        scalar_content_text = func.replace(content_text, '"', '')
+        comparable_content = func.lower(scalar_content_text)
         text_for_contains = content_text
-        numeric_source = AssetSpec.content.astext
+        numeric_source = case(
+            (
+                func.jsonb_typeof(AssetSpec.content) == "number",
+                scalar_content_text,
+            ),
+            else_=None,
+        )
 
     expected_norm = expected.lower()
 
@@ -1102,12 +1120,14 @@ def _apply_spec_filter(query, raw_filter: dict):
         value_condition = comparable_content != expected_norm
     elif operator in {"not_contains", "nao_contem"}:
         value_condition = ~text_for_contains.ilike(f"%{expected}%")
-    elif operator in {"gt", "gte", "lt", "lte", "greater_than", "greater_or_equal", "less_than", "less_or_equal"}:
+    elif operator in numeric_operators:
         try:
             expected_number = float(expected.replace(",", "."))
         except ValueError:
             value_condition = False
         else:
+            if not field_key:
+                conditions.append(Feature.feature_type == "number")
             numeric_content = cast(numeric_source, Float)
             if operator in {"gt", "greater_than"}:
                 value_condition = numeric_content > expected_number
