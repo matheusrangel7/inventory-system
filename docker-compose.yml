@@ -1,43 +1,58 @@
-services:
+x-local-logging: &local-logging
+  logging:
+    driver: local
+    options:
+      max-size: 10m
+      max-file: "3"
 
+services:
   db:
+    <<: *local-logging
     image: postgres:15-alpine
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - .env
     environment:
-      POSTGRES_DB:       ${DB_NAME}
-      POSTGRES_USER:     ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_DB_USER: ${APP_DB_USER}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
     volumes:
       - db_data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d
+      - ./db/init:/docker-entrypoint-initdb.d:ro
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
 
   backend:
+    <<: *local-logging
     build:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - .env
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "5000:5000"
+    expose:
+      - "5000"
     volumes:
       - ./backend:/app
     environment:
-      FLASK_ENV:   development
+      FLASK_ENV: development
       FLASK_DEBUG: 1
+      POSTGRES_USER: ""
+      POSTGRES_PASSWORD: ""
 
   frontend:
+    <<: *local-logging
     build:
       context: ./nginx
       dockerfile: Dockerfile
@@ -45,17 +60,21 @@ services:
     depends_on:
       - backend
     ports:
-      - "80:80"
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
+    environment:
+      NGINX_HSTS_VALUE: "${NGINX_HSTS_VALUE:-max-age=0}"
     volumes:
-      - ./frontend:/usr/share/nginx/html
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
 
   mailhog:
+    <<: *local-logging
     image: mailhog/mailhog
     restart: unless-stopped
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
 
 volumes:
   db_data:

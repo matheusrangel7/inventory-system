@@ -149,6 +149,7 @@ activemq-data/
 
 # Environments
 .env
+.env.tunnel
 .envrc
 .venv
 env/
@@ -227,3 +228,9 @@ tailwindcss
 .vscode/
 
 input.css
+
+nginx/certs/
+pop_db.py
+
+docs/
+TODO.md

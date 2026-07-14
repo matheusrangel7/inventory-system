@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InvUBI - Sessão Expirada</title>
+    <link rel="stylesheet" href="/css/tailwind.css">
+</head>
+<body class="min-h-screen bg-slate-100 text-slate-900">
+    <main class="flex min-h-screen items-center justify-center px-4 py-10">
+        <section class="w-full max-w-lg rounded-3xl bg-white p-8 shadow-xl ring-1 ring-slate-200">
+            <div class="mb-8 flex items-center gap-4">
+                <img src="/assets/ubi-logo-dark.png" alt="InvUBI" class="h-14 w-auto">
+                <div>
+                    <p class="text-xs font-black uppercase tracking-[0.24em] text-blue-900">InvUBI</p>
+                    <h1 class="mt-1 text-2xl font-black text-slate-950">Sessão expirada</h1>
+                </div>
+            </div>
+
+            <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm font-semibold text-amber-900">
+                <p id="sessionExpiredReason">A tua sessão expirou ou deixou de ser válida.</p>
+            </div>
+
+            <p class="mt-5 text-sm leading-6 text-slate-600">
+                Por segurança, tens de iniciar sessão novamente para continuar a usar a plataforma.
+            </p>
+
+            <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+                <button id="btnGoLogin" type="button" class="inline-flex min-h-12 flex-1 items-center justify-center rounded-xl bg-blue-900 px-5 py-3 text-sm font-black uppercase tracking-wide text-white transition hover:bg-blue-800">
+                    Iniciar sessão
+                </button>
+                <button id="btnRetrySession" type="button" class="inline-flex min-h-12 flex-1 items-center justify-center rounded-xl border border-blue-900 bg-white px-5 py-3 text-sm font-black uppercase tracking-wide text-blue-900 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60">
+                    Verificar sessão
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/session-expired.js"></script>
+</body>
+</html>

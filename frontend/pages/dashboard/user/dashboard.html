@@ -5,262 +5,500 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>InvUBI - Gestor Dashboard</title>
-    <link rel="stylesheet" href="../../../css/tailwind.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/css/tailwind.css">
+    <script src="/js/vendor/chart.umd.min.js"></script>
 </head>
 
-<body class="bg-gray-100 h-screen overflow-hidden">
+<body class="bg-gray-100 h-screen overflow-hidden" data-dashboard-role="gestor">
     <div class="flex h-full">
-        
-        <div class="w-64 bg-blue-900 h-full p-4 flex flex-col flex-shrink-0">
-            <div class="flex items-center gap-3 mb-8 p-2">
-                <div class="flex gap-1">
-                    <img src="../../../assets/ubi-logo-white.png" class="w-20 h-20">
-                </div>
-                <h1 class="text-4xl text-white font-semibold">InvUBI</h1>
-            </div>
-
-            <nav class="flex-1">
-                <button onclick="showView('inicio')" id="btn-inicio"
-                    class="w-full flex items-center gap-3 px-4 py-3 mb-2 rounded bg-white text-blue-900">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                    </svg>
-                    <span>Página Inicial</span>
-                </button>
-
-                <button onclick="showView('ativos')" id="btn-ativos"
-                    class="w-full flex items-center gap-3 px-4 py-3 mb-2 rounded text-white hover:bg-blue-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                    </svg>
-                    <span>Ativos</span>
-                </button>
-
-                <button onclick="showView('salas')" id="btn-salas"
-                    class="w-full flex items-center gap-3 px-4 py-3 mb-2 rounded text-white hover:bg-blue-800">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    <span>Salas / Locais</span>
-                </button>
-            </nav>
-
-            <div class="mt-auto">
-                <button onclick="window.location.href='index.html'"
-                    class="w-full bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors font-bold">
-                    SAIR
-                </button>
-            </div>
-        </div>
+        <div data-dashboard-sidebar></div>
 
         <div class="flex-1 flex flex-col h-full min-w-0">
-            
-            <header class="bg-white shadow-sm p-4 flex justify-between items-center flex-shrink-0">
-                <h1 class="text-xl font-bold" id="pageTitle">PÁGINA INICIAL</h1>
-                <div class="flex items-center gap-4">
-                    <span class="text-sm">abc@ubi.pt (Gestor)</span>
-                    <div class="w-10 h-10 bg-gray-600 text-white rounded-full flex items-center justify-center font-bold">
-                        AG
-                    </div>
-                </div>
-            </header>
+            <div data-dashboard-header></div>
 
             <main class="p-6 flex-1 overflow-y-auto">
                 <div id="view-inicio">
-                    <div class="grid grid-cols-3 gap-6 mb-6">
+                    <div id="gestorEmptyNotice" class="hidden mb-6 rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-900">
+                        Ainda não tens locais atribuídos. Quando um administrador te associar a uma sala/local, os ativos aparecem aqui automaticamente.
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-6 mb-6 md:grid-cols-3">
                         <div class="bg-white p-6 rounded-lg shadow">
                             <h3 class="text-sm text-gray-600 mb-2">Total de Ativos</h3>
-                            <p class="text-4xl font-bold">20</p>
+                            <p class="text-4xl font-bold" id="count-assets">0</p>
                         </div>
                         <div class="bg-white p-6 rounded-lg shadow">
-                            <h3 class="text-sm text-gray-600 mb-2">Total de Salas / Locais Associados</h3>
-                            <p class="text-4xl font-bold">2</p>
+                            <h3 class="text-sm text-gray-600 mb-2">Locais Associados</h3>
+                            <p class="text-4xl font-bold" id="count-locations">0</p>
                         </div>
                         <div class="bg-white p-6 rounded-lg shadow">
-                            <h3 class="text-sm text-gray-600 mb-2">Manutenções Pendente</h3>
-                            <p class="text-4xl font-bold text-red-600">5</p>
+                            <h3 class="text-sm text-gray-600 mb-2">Ativos a Precisar de Ação</h3>
+                            <p class="text-4xl font-bold text-red-600" id="count-action-assets">0</p>
                         </div>
                     </div>
 
-                    <div class="bg-white p-6 rounded-lg shadow mb-6">
-                        <h3 class="text-lg font-bold mb-4">Ativos por Estado</h3>
-                        <canvas id="chartEstado" height="200"></canvas>
-                    </div>
-
-                    <div class="bg-white p-6 rounded-lg shadow mb-6">
-                        <h3 class="text-lg font-bold mb-4">Distribuição por Sala / Local</h3>
-                        <canvas id="chartDistribuicao" height="200"></canvas>
+                    <div class="grid grid-cols-1 gap-6 mb-6 xl:grid-cols-2">
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-lg font-bold mb-4">Ativos por Estado</h3>
+                            <div class="relative h-64 w-full">
+                                <canvas id="chartEstado"></canvas>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h3 class="text-lg font-bold mb-4">Distribuição por Local</h3>
+                            <div class="relative h-64 w-full">
+                                <canvas id="chartDistribuicao"></canvas>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="bg-white p-6 rounded-lg shadow">
-                        <h3 class="text-lg font-bold mb-4">Ativos Que Necessitam Ação</h3>
-                        <table class="w-full">
-                            <thead class="bg-gray-100">
-                                <tr>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ID</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">CATEGORIA</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">SALA</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ESTADO</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">DATA DE REGISTO</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr class="border-b">
-                                    <td class="px-4 py-3">1</td>
-                                    <td class="px-4 py-3">Computador</td>
-                                    <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-yellow-100 text-yellow-800">Necessita Manutenção</span></td>
-                                    <td class="px-4 py-3">11/05/2026</td>
-                                </tr>
-                                <tr class="border-b">
-                                    <td class="px-4 py-3">2</td>
-                                    <td class="px-4 py-3">Servidor</td>
-                                    <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-yellow-100 text-yellow-800">Necessita Manutenção</span></td>
-                                    <td class="px-4 py-3">11/05/2026</td>
-                                </tr>
-                                <tr class="border-b">
-                                    <td class="px-4 py-3">3</td>
-                                    <td class="px-4 py-3">Monitor</td>
-                                    <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-orange-100 text-orange-800">Avariado</span></td>
-                                    <td class="px-4 py-3">11/05/2026</td>
-                                </tr>
-                                <tr class="border-b">
-                                    <td class="px-4 py-3">4</td>
-                                    <td class="px-4 py-3">Periféricos</td>
-                                    <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-red-100 text-red-800">Para Abate</span></td>
-                                    <td class="px-4 py-3">11/05/2026</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+                            <div>
+                                <h3 class="text-lg font-bold">Ativos Que Necessitam Ação</h3>
+                                <p class="text-xs text-gray-500" id="actionAssetsResultCount">0 resultados</p>
+                            </div>
+                            <button type="button" id="btnVerTodosAtivos"
+                                class="rounded-md bg-blue-900 px-3 py-2 text-xs font-extrabold uppercase text-white hover:bg-blue-800">
+                                Ver todos os ativos
+                            </button>
+                        </div>
+                        <div class="table-shell relative w-full overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+                            <table class="w-full min-w-max border-separate border-spacing-0 text-sm">
+                                <thead class="bg-slate-50 text-blue-900">
+                                    <tr>
+                                        <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">ID</th>
+                                        <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">CATEGORIA</th>
+                                        <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">LOCAL</th>
+                                        <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">ESTADO</th>
+                                        <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">ÚLTIMA MANUTENÇÃO</th>
+                                        <th class="sticky right-0 z-[9] w-px whitespace-nowrap border-l border-gray-200 bg-slate-50 px-2 py-3 text-right text-xs font-black uppercase tracking-wide text-blue-900 shadow-[-10px_0_14px_-18px_rgba(15,23,42,0.75)]">AÇÕES</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="actionAssetsTableBody"></tbody>
+                            </table>
+                        </div>
+                        <div id="actionAssetsPagination" class="table-pagination mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4" aria-label="Paginação de ativos que precisam de ação"></div>
                     </div>
                 </div>
 
                 <div id="view-ativos" class="hidden">
-                    <div class="flex justify-between items-center mb-6">
-                        <h2 class="text-2xl font-bold">ATIVOS</h2>
-                        <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                            </svg>
-                            NOVO ATIVO
-                        </button>
-                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow mb-6">
+                        <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <h2 class="text-2xl font-bold">Ativos</h2>
+                                <p class="text-xs text-gray-500" id="assetsResultCount">0 resultados</p>
+                            </div>
+                        </div>
 
-                    <div class="bg-white p-4 rounded-lg shadow flex gap-4 mb-6">
-                        <select class="px-4 py-2 border rounded"><option>Todas</option></select>
-                        <select class="px-4 py-2 border rounded"><option>Todas</option></select>
-                        <select class="px-4 py-2 border rounded"><option>Todas</option></select>
-                        <select class="px-4 py-2 border rounded"><option>Todas</option></select>
-                    </div>
+                        <div class="asset-search-panel mb-5 rounded-2xl border border-blue-100 bg-slate-50/80 p-4 shadow-sm">
+                            <div class="asset-search-main flex flex-wrap items-end gap-3">
+                                <div class="asset-search-control flex w-full flex-col gap-1 md:w-80 md:flex-none">
+                                    <label for="assets-search">Pesquisar</label>
+                                    <input type="text" id="assets-search" placeholder="ID, código, sala ou responsável">
+                                </div>
+                                <div class="asset-search-control flex w-full flex-col gap-1 md:w-64 md:flex-none">
+                                    <label for="assets-category">Categoria</label>
+                                    <select id="assets-category">
+                                        <option value="">Todas</option>
+                                    </select>
+                                </div>
+                                <button type="button" class="asset-search-button asset-search-button-secondary inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-900 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-blue-900 transition hover:bg-blue-50 aria-expanded:bg-blue-50" data-assets-filters-toggle aria-expanded="false">Filtros</button>
+                                <button type="button" id="btnLimparFiltrosAtivos" class="asset-search-button asset-search-button-danger inline-flex min-h-10 items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-red-700 transition hover:border-red-600 hover:bg-red-50">Limpar</button>
+                                <button id="btnNovoAtivoGestor" type="button" class="h-9 rounded-md bg-blue-900 px-3 text-xs font-extrabold uppercase text-white hover:bg-blue-800">+ Novo Ativo</button>
+                            </div>
 
-                    <div class="bg-white p-6 rounded-lg shadow">
-                        <table class="w-full">
-                            <thead class="bg-gray-100">
-                                <tr>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ID</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">CATEGORIA</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">SALA</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ESTADO</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">ATRIBUIDO A</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">DATA DE REGISTO</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">AÇÕES</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr class="border-b hover:bg-gray-50">
-                                    <td class="px-4 py-3">1</td>
-                                    <td class="px-4 py-3">Computador</td>
-                                    <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-green-100 text-green-800">Bom</span></td>
-                                    <td class="px-4 py-3">João Silva</td>
-                                    <td class="px-4 py-3">11/05/2026</td>
-                                    <td class="px-4 py-3"><button class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">DETALHES</button></td>
-                                </tr>
-                                <tr class="border-b hover:bg-gray-50">
-                                    <td class="px-4 py-3">2</td>
-                                    <td class="px-4 py-3">Servidor</td>
-                                    <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-green-100 text-green-800">Bom</span></td>
-                                    <td class="px-4 py-3">-</td>
-                                    <td class="px-4 py-3">11/05/2026</td>
-                                    <td class="px-4 py-3"><button class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">DETALHES</button></td>
-                                </tr>
-                                <tr class="border-b hover:bg-gray-50">
-                                    <td class="px-4 py-3">3</td>
-                                    <td class="px-4 py-3">Monitor</td>
-                                    <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-orange-100 text-orange-800">Avariado</span></td>
-                                    <td class="px-4 py-3">-</td>
-                                    <td class="px-4 py-3">11/05/2026</td>
-                                    <td class="px-4 py-3"><button class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">DETALHES</button></td>
-                                </tr>
-                                <tr class="border-b hover:bg-gray-50">
-                                    <td class="px-4 py-3">4</td>
-                                    <td class="px-4 py-3">Periféricos</td>
-                                    <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-gray-100 text-gray-800">Para Abate</span></td>
-                                    <td class="px-4 py-3">-</td>
-                                    <td class="px-4 py-3">11/05/2026</td>
-                                    <td class="px-4 py-3"><button class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">DETALHES</button></td>
-                                </tr>
-                            </tbody>
-                        </table>
+                            <div id="assetsActiveFiltersSummary" class="asset-active-summary flex flex-wrap gap-2 empty:hidden"></div>
+                            <div id="assetsColumnPicker" class="asset-column-picker mt-4 hidden rounded-xl border border-blue-100 bg-white p-4" aria-live="polite"></div>
+
+                            <div id="assetsFiltersDrawer" class="asset-filters-drawer mt-4 hidden rounded-xl border border-gray-200 bg-white p-4">
+                                <div class="asset-filters-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="assets-location">Local</label>
+                                        <select id="assets-location">
+                                            <option value="">Todos</option>
+                                        </select>
+                                    </div>
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="assets-status">Estado</label>
+                                        <select id="assets-status">
+                                            <option value="">Todos</option>
+                                        </select>
+                                    </div>
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="assets-assignment">Atribuição</label>
+                                        <select id="assets-assignment">
+                                            <option value="">Todos</option>
+                                            <option value="assigned">Com atribuição</option>
+                                            <option value="unassigned">Sem atribuição</option>
+                                        </select>
+                                    </div>
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="assets-sort">Ordenar</label>
+                                        <select id="assets-sort">
+                                            <option value="date-desc">Mais recentes</option>
+                                            <option value="date-asc">Mais antigos</option>
+                                            <option value="category-asc">Categoria A-Z</option>
+                                            <option value="location-asc">Local A-Z</option>
+                                            <option value="status-asc">Estado A-Z</option>
+                                            <option value="id-asc">ID crescente</option>
+                                            <option value="id-desc">ID decrescente</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <section class="asset-feature-filter-card mt-4 rounded-2xl border border-blue-100 bg-blue-50/40 p-3">
+                                    <div class="flex flex-wrap items-center justify-between gap-3">
+                                        <div class="min-w-0">
+                                            <p class="text-xs font-black uppercase tracking-wide text-blue-900">Características</p>
+                                            <p id="assetSpecFilterHelper" class="mt-0.5 text-xs font-semibold text-gray-500">Seleciona uma categoria para ativar filtros por características.</p>
+                                        </div>
+                                        <button id="btnAdicionarFiltroSpecAtivo" type="button" class="asset-search-button asset-search-button-secondary inline-flex min-h-9 items-center justify-center rounded-xl border border-blue-900 bg-white px-3 py-2 text-xs font-black uppercase tracking-wide text-blue-900 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400">
+                                            + Adicionar filtro
+                                        </button>
+                                    </div>
+
+                                    <div id="assetsCategoryFeaturesPanel" class="asset-category-feature-summary mt-3 flex flex-wrap gap-1.5 empty:hidden"></div>
+
+                                    <div class="asset-advanced-filters mt-3 hidden rounded-2xl border border-blue-100 bg-white p-3">
+                                        <div id="assetSpecFiltersRows" class="space-y-2">
+                                            <p class="asset-spec-filter-empty">Sem filtros avançados ativos.</p>
+                                        </div>
+                                    </div>
+                                </section>
+                            </div>
+                        </div>
+
+                        <div class="table-shell relative w-full overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+                            <table class="w-full min-w-max text-sm">
+                                <thead id="assetsTableHead" class="bg-gray-200 text-blue-900">
+                                </thead>
+                                <tbody id="assetsTableBody"></tbody>
+                            </table>
+                        </div>
+                        <div id="assetsPagination" class="table-pagination mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4" aria-label="Paginação dos ativos"></div>
                     </div>
                 </div>
 
-                <div id="view-salas" class="hidden">
-                    <div class="flex justify-between items-center mb-6">
-                        <h2 class="text-2xl font-bold">ATIVOS</h2>
-                        <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-bold">FILTRAR</button>
-                    </div>
+                <div id="view-categorias" class="hidden">
+                    <div class="bg-white p-6 rounded-lg shadow mb-6">
+                        <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <h2 class="text-2xl font-bold">Categorias</h2>
+                                <p class="text-xs text-gray-500" id="categoriesResultCount">0 resultados</p>
+                            </div>
+                        </div>
 
-                    <div class="bg-white p-6 rounded-lg shadow">
-                        <table class="w-full">
-                            <thead class="bg-gray-100">
-                                <tr>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">SALA / LOCAL</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">NOME DA SALA</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">QUANTIDADE DE ATIVOS</th>
-                                    <th class="px-4 py-2 text-left text-sm font-bold">DETALHES</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr class="border-b hover:bg-gray-50">
-                                    <td class="px-4 py-3">SALA 1</td>
-                                    <td class="px-4 py-3">6.10</td>
-                                    <td class="px-4 py-3">40</td>
-                                    <td class="px-4 py-3"><button class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">VER ATIVOS</button></td>
-                                </tr>
-                                <tr class="border-b hover:bg-gray-50">
-                                    <td class="px-4 py-3">SALA 2</td>
-                                    <td class="px-4 py-3">6.9</td>
-                                    <td class="px-4 py-3">20</td>
-                                    <td class="px-4 py-3"><button class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">VER ATIVOS</button></td>
-                                </tr>
-                                <tr class="border-b hover:bg-gray-50">
-                                    <td class="px-4 py-3">SALA 3</td>
-                                    <td class="px-4 py-3">6.6</td>
-                                    <td class="px-4 py-3">150</td>
-                                    <td class="px-4 py-3"><button class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">VER ATIVOS</button></td>
-                                </tr>
-                                <tr class="border-b hover:bg-gray-50">
-                                    <td class="px-4 py-3">SALA 4</td>
-                                    <td class="px-4 py-3">6.7</td>
-                                    <td class="px-4 py-3">70</td>
-                                    <td class="px-4 py-3"><button class="bg-blue-900 text-white px-3 py-1 rounded text-xs hover:bg-blue-800 font-bold">VER ATIVOS</button></td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <div class="asset-search-panel mb-5 rounded-2xl border border-blue-100 bg-slate-50/80 p-4 shadow-sm" data-search-panel="categories">
+                            <div class="asset-search-main search-main-simple flex flex-wrap items-end gap-3">
+                                <div class="asset-search-control flex w-full flex-col gap-1 md:w-80 md:flex-none">
+                                    <label for="categories-search">Pesquisar</label>
+                                    <input type="text" id="categories-search" placeholder="ID, categoria ou feature">
+                                </div>
+                                <button type="button" class="asset-search-button asset-search-button-secondary inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-900 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-blue-900 transition hover:bg-blue-50 aria-expanded:bg-blue-50" data-categories-filters-toggle aria-controls="categoriesFiltersDrawer" aria-expanded="false">Filtros</button>
+                                <button type="button" id="btnLimparFiltrosCategorias" class="asset-search-button asset-search-button-danger inline-flex min-h-10 items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-red-700 transition hover:border-red-600 hover:bg-red-50">Limpar</button>
+                            </div>
+                            <div id="categoriesActiveFiltersSummary" class="asset-active-summary flex flex-wrap gap-2 empty:hidden"></div>
+                            <div id="categoriesFiltersDrawer" class="asset-filters-drawer mt-4 hidden rounded-xl border border-gray-200 bg-white p-4">
+                                <div class="asset-filters-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="categories-sort">Ordenar</label>
+                                        <select id="categories-sort">
+                                            <option value="name-asc">Categoria A-Z</option>
+                                            <option value="name-desc">Categoria Z-A</option>
+                                            <option value="id-asc">ID crescente</option>
+                                            <option value="id-desc">ID decrescente</option>
+                                            <option value="features-asc">Menos features</option>
+                                            <option value="features-desc">Mais features</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-shell relative w-full overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+                            <table class="w-full min-w-max border-separate border-spacing-0 text-sm">
+                                <thead class="bg-slate-50 text-blue-900">
+                                    <tr>
+                                        <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">ID</th>
+                                        <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">CATEGORIA</th>
+                                        <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">FEATURES</th>
+                                        <th class="sticky right-0 z-[9] w-px whitespace-nowrap border-l border-gray-200 bg-slate-50 px-2 py-3 text-right text-xs font-black uppercase tracking-wide text-blue-900 shadow-[-10px_0_14px_-18px_rgba(15,23,42,0.75)]">AÇÕES</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="categoriesTableBody"></tbody>
+                            </table>
+                        </div>
+                        <div id="categoriesPagination" class="table-pagination mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4" aria-label="Paginação das categorias"></div>
+                    </div>
+                </div>
+
+                <div id="view-locais" class="hidden">
+                    <div class="bg-white p-6 rounded-lg shadow mb-6">
+                        <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <h2 class="text-2xl font-bold">Locais</h2>
+                                <p class="text-xs text-gray-500" id="locationsResultCount">0 resultados</p>
+                            </div>
+                        </div>
+
+                        <div class="asset-search-panel mb-5 rounded-2xl border border-blue-100 bg-slate-50/80 p-4 shadow-sm" data-search-panel="locations">
+                            <div class="asset-search-main search-main-simple flex flex-wrap items-end gap-3">
+                                <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                    <label for="locations-search">Pesquisar</label>
+                                    <input type="text" id="locations-search" placeholder="ID, local ou estado">
+                                </div>
+                                <button type="button" class="asset-search-button asset-search-button-secondary inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-900 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-blue-900 transition hover:bg-blue-50 aria-expanded:bg-blue-50" data-locations-filters-toggle aria-controls="locationsFiltersDrawer" aria-expanded="false">Filtros</button>
+                                <button type="button" id="btnLimparFiltrosLocais" class="asset-search-button asset-search-button-danger inline-flex min-h-10 items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-red-700 transition hover:border-red-600 hover:bg-red-50">Limpar</button>
+                            </div>
+                            <div id="locationsActiveFiltersSummary" class="asset-active-summary flex flex-wrap gap-2 empty:hidden"></div>
+                            <div id="locationsFiltersDrawer" class="asset-filters-drawer mt-4 hidden rounded-xl border border-gray-200 bg-white p-4">
+                                <div class="asset-filters-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="locations-sort">Ordenar</label>
+                                        <select id="locations-sort">
+                                            <option value="name-asc">Local A-Z</option>
+                                            <option value="name-desc">Local Z-A</option>
+                                            <option value="assets-desc">Mais ativos</option>
+                                            <option value="assets-asc">Menos ativos</option>
+                                            <option value="id-asc">ID crescente</option>
+                                            <option value="id-desc">ID decrescente</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-shell relative w-full overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+                            <table class="w-full min-w-max border-separate border-spacing-0 text-sm">
+                                <thead class="bg-slate-50 text-blue-900">
+                                    <tr>
+                                        <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">ID</th>
+                                        <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">LOCAL</th>
+                                        <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">ATIVOS</th>
+                                        <th class="sticky right-0 z-[9] w-px whitespace-nowrap border-l border-gray-200 bg-slate-50 px-2 py-3 text-right text-xs font-black uppercase tracking-wide text-blue-900 shadow-[-10px_0_14px_-18px_rgba(15,23,42,0.75)]">AÇÕES</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="locationsTableBody"></tbody>
+                            </table>
+                        </div>
+                        <div id="locationsPagination" class="table-pagination mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4" aria-label="Paginação dos locais"></div>
+                    </div>
+                </div>
+
+
+                <div id="view-registos" class="hidden">
+                    <div class="bg-white p-6 rounded-lg shadow mb-6">
+                        <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <h2 class="text-2xl font-bold">Registos</h2>
+                                <p class="text-xs text-gray-500" id="logsResultCount">0 resultados</p>
+                                <p class="mt-1 text-xs font-semibold text-gray-500">Só aparecem registos dos ativos associados às tuas salas.</p>
+                            </div>
+                        </div>
+
+                        <div class="asset-search-panel mb-5 rounded-2xl border border-blue-100 bg-slate-50/80 p-4 shadow-sm">
+                            <div class="asset-search-main search-main-simple flex flex-wrap items-end gap-3">
+                                <div class="asset-search-control flex w-full flex-col gap-1 md:w-80 md:flex-none">
+                                    <label for="logs-search">Pesquisar</label>
+                                    <input type="text" id="logs-search" placeholder="Data, utilizador, ação, ativo ou detalhe">
+                                </div>
+                                <button type="button" class="asset-search-button asset-search-button-secondary inline-flex min-h-10 items-center justify-center rounded-xl border border-blue-900 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-blue-900 transition hover:bg-blue-50 aria-expanded:bg-blue-50" data-logs-filters-toggle aria-controls="logsFiltersDrawer" aria-expanded="false">Filtros</button>
+                                <button type="button" id="btnLimparFiltrosRegistos" class="asset-search-button asset-search-button-danger inline-flex min-h-10 items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-black uppercase tracking-wide text-red-700 transition hover:border-red-600 hover:bg-red-50">Limpar</button>
+                            </div>
+                            <div id="logsActiveFiltersSummary" class="asset-active-summary flex flex-wrap gap-2 empty:hidden"></div>
+                            <div id="logsFiltersDrawer" class="asset-filters-drawer mt-4 hidden rounded-xl border border-gray-200 bg-white p-4">
+                                <div class="asset-filters-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="logs-user">Utilizador</label>
+                                        <select id="logs-user">
+                                            <option value="">Todos</option>
+                                        </select>
+                                    </div>
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="logs-action">Ação</label>
+                                        <select id="logs-action">
+                                            <option value="">Todas</option>
+                                        </select>
+                                    </div>
+                                    <div class="asset-search-control flex min-w-[14rem] flex-1 flex-col gap-1">
+                                        <label for="logs-sort">Ordenar</label>
+                                        <select id="logs-sort">
+                                            <option value="date-desc">Mais recentes</option>
+                                            <option value="date-asc">Mais antigos</option>
+                                            <option value="user-asc">Utilizador A-Z</option>
+                                            <option value="action-asc">Ação A-Z</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-shell relative w-full overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+                            <table class="w-full min-w-max border-separate border-spacing-0 text-sm">
+                                <thead class="bg-slate-50 text-blue-900">
+                                    <tr>
+                                        <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">DATA/HORA</th>
+                                        <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">UTILIZADOR</th>
+                                        <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">AÇÃO</th>
+                                        <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">ÁREA</th>
+                                        <th class="border-b border-gray-200 bg-slate-50 px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-blue-900 whitespace-nowrap">DETALHES</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="logsTableBody"></tbody>
+                            </table>
+                        </div>
+                        <div id="logsPagination" class="table-pagination mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4" aria-label="Paginação dos registos"></div>
                     </div>
                 </div>
             </main>
+
+            <div data-dashboard-footer></div>
         </div>
     </div>
+
+    <div id="toastMessage" class="fixed right-6 top-6 z-50 hidden max-w-sm rounded-xl px-4 py-3 text-sm font-semibold shadow-lg"></div>
+
+    <div id="modalAtivoGestor" data-dashboard-modal class="dashboard-modal fixed inset-0 z-[1000] hidden items-center justify-center overflow-y-auto bg-black/40 p-4" aria-hidden="true">
+        <div class="flex max-h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white p-6 shadow-2xl">
+            <div class="mb-5 flex items-start justify-between gap-4">
+                <div>
+                    <h2 id="modalAtivoTitulo" class="text-xl font-black text-blue-900">Novo Ativo</h2>
+                    <p class="text-xs text-gray-500">Regista ou atualiza ativos associados aos teus locais.</p>
+                </div>
+                <button type="button" data-close-modal="modalAtivoGestor" class="text-2xl font-bold text-gray-500 hover:text-gray-900">×</button>
+            </div>
+
+            <form id="formAtivoGestor" class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <input id="editing-asset-id" type="hidden" value="">
+
+                <div>
+                    <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">Número de Série</label>
+                    <input id="asset-serial" type="text" required
+                        class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20"
+                        placeholder="SN-0001">
+                    <p id="serialEditHint" class="mt-1 hidden text-xs text-gray-500">O número de série não é alterado durante a edição.</p>
+                </div>
+
+                <div>
+                    <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">Categoria</label>
+                    <select id="asset-category" required
+                        class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20"></select>
+                </div>
+
+                <div>
+                    <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">Local</label>
+                    <select id="asset-location" required
+                        class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20"></select>
+                </div>
+
+                <div>
+                    <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">Estado</label>
+                    <select id="asset-state"
+                        class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20">
+                        <option value="Bom Estado">Bom Estado</option>
+                        <option value="Necessita Manutenção">Necessita Manutenção</option>
+                        <option value="Avariado">Avariado</option>
+                        <option value="Para Abate">Para Abate</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">Atribuído a</label>
+                    <input id="asset-assigned" type="text"
+                        class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20"
+                        placeholder="Opcional">
+                </div>
+
+                <div>
+                    <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">Última manutenção</label>
+                    <input id="asset-last-maintenance" type="date"
+                        class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20">
+                    <p class="mt-1 text-xs text-gray-500">Ao marcar como Bom Estado, a data pode ser preenchida com hoje.</p>
+                </div>
+
+                <div>
+                    <label class="mb-1 block text-xs font-extrabold uppercase text-blue-900">Período manutenção (meses)</label>
+                    <input id="asset-maintenance-period" type="number" min="1"
+                        class="w-full rounded-lg border-2 border-blue-900 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-900/20"
+                        placeholder="Opcional">
+                </div>
+                <div class="asset-specs-panel md:col-span-2 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
+                    <div class="asset-specs-panel-header mb-3">
+                        <h3 class="text-sm font-black uppercase text-blue-900">Características da Categoria</h3>
+                        <p class="text-xs text-gray-500">Os campos mudam automaticamente conforme a categoria selecionada.</p>
+                    </div>
+                    <div id="assetSpecsFields" class="asset-specs-grid grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <p class="md:col-span-2 text-sm text-gray-500">Seleciona uma categoria para aparecerem os campos certos.</p>
+                    </div>
+                </div>
+
+                <div class="sticky bottom-0 flex flex-wrap justify-end gap-3 bg-white pt-3 md:col-span-2">
+                    <button type="button" data-close-modal="modalAtivoGestor"
+                        class="rounded-lg border-2 border-blue-900 px-4 py-2 text-sm font-bold text-blue-900 hover:bg-gray-100">Cancelar</button>
+                    <button id="assetSubmitBtn" type="submit"
+                        class="rounded-lg bg-blue-900 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="modalDetalheAtivo" data-dashboard-modal class="dashboard-modal fixed inset-0 z-[1000] hidden items-center justify-center overflow-y-auto bg-black/40 p-4" aria-hidden="true">
+        <div class="flex max-h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white p-6 shadow-2xl">
+            <div class="mb-5 flex items-start justify-between gap-4">
+                <div>
+                    <h2 class="text-xl font-black text-blue-900">Detalhe do Ativo</h2>
+                    <p class="text-xs text-gray-500">Consulta rápida dos dados principais e características.</p>
+                </div>
+                <button type="button" data-close-modal="modalDetalheAtivo" class="text-2xl font-bold text-gray-500 hover:text-gray-900">×</button>
+            </div>
+
+            <div class="modal-scroll-area">
+                <div id="assetDetailSummary" class="grid grid-cols-1 gap-3 md:grid-cols-4"></div>
+
+                <div class="mt-5 rounded-xl border border-gray-100 bg-gray-50 p-4">
+                    <h3 class="mb-3 text-sm font-black uppercase text-blue-900">Características</h3>
+                    <div id="assetDetailSpecs" class="grid grid-cols-1 gap-3 md:grid-cols-2"></div>
+                </div>
+            </div>
+
+            <div class="sticky bottom-0 mt-5 flex flex-wrap justify-end gap-3 bg-white pt-3">
+                <button id="btnEditarAtivoDetalhe" type="button"
+                    class="rounded-lg border-2 border-blue-900 px-4 py-2 text-sm font-bold text-blue-900 hover:bg-gray-100">Editar</button>
+                <button type="button" data-close-modal="modalDetalheAtivo"
+                    class="rounded-lg bg-blue-900 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+
+
+    <div id="modalDetalheRegisto" data-dashboard-modal class="dashboard-modal fixed inset-0 z-[1000] hidden items-center justify-center overflow-y-auto bg-black/40 p-4" aria-hidden="true">
+        <div class="flex max-h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white p-6 shadow-2xl">
+            <div class="mb-5 flex items-start justify-between gap-4">
+                <div>
+                    <h2 class="text-xl font-black text-blue-900">Detalhe do Registo</h2>
+                    <p class="text-xs text-gray-500">Consulta o que mudou e executa rollback quando estiver disponível.</p>
+                </div>
+                <button type="button" data-close-modal="modalDetalheRegisto" class="text-2xl font-bold text-gray-500 hover:text-gray-900">×</button>
+            </div>
+
+            <div id="logDetailContent" class="modal-scroll-area space-y-5"></div>
+
+            <div class="sticky bottom-0 mt-5 flex flex-wrap justify-end gap-3 bg-white pt-3">
+                <button type="button" data-close-modal="modalDetalheRegisto"
+                    class="rounded-lg bg-blue-900 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800">Fechar</button>
+            </div>
+        </div>
+    </div>
+    <script src="/js/api.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/layout-fragments.js"></script>
+    <script src="/js/mfa-reconfiguration.js"></script>
+    <script src="/js/profile-security.js"></script>
+    <script src="/js/dashboard.js"></script>
+    <script src="/js/gestor-dashboard.js"></script>
+    <script src="/js/dashboard-boot.js"></script>
 </body>
 
 </html>
